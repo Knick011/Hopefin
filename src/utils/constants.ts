@@ -1,189 +1,133 @@
-// src/utils/constants.ts
-
 export const Colors = {
-    // Primary colors
-    primary: '#FF9F1C',
-    primaryDark: '#E88F0A',
-    primaryLight: '#FFB84D',
-    
-    // Secondary colors
-    secondary: '#4ECDC4',
-    secondaryDark: '#44B5AD',
-    secondaryLight: '#6FE3DB',
-    
-    // Accent colors
-    accent: '#FFD93D',
-    success: '#4ECDC4',
-    error: '#FF6B6B',
-    warning: '#FFA726',
-    info: '#667eea',
-    
-    // Background colors
-    background: '#FFFCF2',
-    surface: '#FFFFFF',
-    
-    // Text colors
-    textPrimary: '#333333',
-    textSecondary: '#666666',
-    textLight: '#999999',
-    textOnPrimary: '#FFFFFF',
-    
-    // Difficulty colors
-    easy: '#4ECDC4',
-    medium: '#FFA726',
-    hard: '#FF6B6B',
-  };
+  // Primary colors
+  primary: '#FF9F1C',
+  primaryDark: '#FF7043',
+  primaryLight: '#FFB74D',
   
-  export const Fonts = {
-    sizes: {
-      xs: 12,
-      sm: 14,
-      md: 16,
-      lg: 18,
-      xl: 24,
-      xxl: 32,
-      xxxl: 48,
-    },
-    weights: {
-      regular: '400' as const,
-      medium: '500' as const,
-      semibold: '600' as const,
-      bold: '700' as const,
-    },
-  };
+  // Background colors
+  background: '#FFF8E7',
+  surface: '#FFFFFF',
   
-  export const Spacing = {
-    xs: 4,
-    sm: 8,
-    md: 16,
-    lg: 24,
-    xl: 32,
-    xxl: 48,
-  };
+  // Text colors
+  textPrimary: '#333333',
+  textSecondary: '#666666',
+  textOnPrimary: '#FFFFFF',
   
-  export const Layout = {
-    borderRadius: {
-      small: 8,
-      medium: 12,
-      large: 16,
-      xl: 24,
-      round: 9999,
-    },
-    shadow: {
-      small: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 2,
-      },
-      medium: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 4,
-      },
-      large: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-        elevation: 8,
-      },
-    },
-  };
+  // Status colors
+  success: '#4CAF50',
+  error: '#F44336',
+  warning: '#FF9800',
+  info: '#2196F3',
   
-  export const CategoryIcons: Record<string, string> = {
-    'Science': 'flask',
-    'Math': 'calculator',
-    'History': 'book-open-variant',
-    'Geography': 'earth',
-    'Literature': 'bookshelf',
-    'Technology': 'laptop',
-    'Sports': 'basketball',
-    'Art': 'palette',
-    'Music': 'music-note',
-    'General': 'head-question',
-    'All': 'view-grid',
-  };
+  // Other colors
+  streak: '#FF6B6B',
+  score: '#FFD700',
+  timer: '#00BCD4',
+  category: {
+    funfacts: '#9C27B0',
+    psychology: '#E91E63',
+    science: '#00BCD4',
+    history: '#FF9800',
+    geography: '#4CAF50',
+    sports: '#F44336',
+    arts: '#3F51B5',
+    general: '#607D8B',
+  },
+};
+
+export const Animations = {
+  // Durations
+  fast: 200,
+  normal: 300,
+  slow: 500,
   
-  export const MascotMessages = {
-    welcome: [
-      "Welcome back! Ready to learn something new? 🌟",
-      "Hey there, genius! Time to train that brain! 🧠",
-      "Great to see you! Let's earn some screen time! ⏰",
-    ],
-    correctAnswer: [
-      "Brilliant! You got it right! 🎉",
-      "Amazing work! Keep it up! 💪",
-      "You're on fire! Great answer! 🔥",
-      "Fantastic! Your brain is growing! 🌱",
-    ],
-    wrongAnswer: [
-      "Not quite right, but that's okay! Learning is all about trying! 💙",
-      "Good effort! Let's learn from this one! 📚",
-      "Keep going! Every mistake makes you smarter! 🌟",
-    ],
-    streak: {
-      5: "5 in a row! You're doing great! 🎯",
-      10: "10 correct! You're unstoppable! 🚀",
-      15: "15 streak! You're a quiz master! 👑",
-      20: "20 in a row! Absolutely incredible! 🌟",
-    },
-    timeWarning: [
-      "Running low on time! Answer some questions to earn more! ⏰",
-      "Time's almost up! Let's get some more questions answered! 📚",
-    ],
-  };
+  // Easing
+  easeIn: 'ease-in',
+  easeOut: 'ease-out',
+  easeInOut: 'ease-in-out',
+  spring: {
+    friction: 8,
+    tension: 40,
+  },
+};
+
+export const MascotMessages = {
+  welcome: [
+    "Welcome back! Ready to learn something new? 🌟",
+    "Hey there! Let's grow that brain of yours! 🧠",
+    "Great to see you! Time for some fun facts! 🎯",
+  ],
   
-  // Types
-  export interface Question {
-    id: number;
-    category: string;
-    question: string;
-    options: {
-      A: string;
-      B: string;
-      C: string;
-      D: string;
-    };
-    correctAnswer: 'A' | 'B' | 'C' | 'D';
-    explanation: string;
-    level: 'Easy' | 'Medium' | 'Hard';
-  }
+  correct: [
+    "Brilliant! You got it right! 🎉",
+    "Amazing work! Keep it up! 💪",
+    "You're on fire! 🔥",
+    "Genius alert! Well done! 🌟",
+    "Perfect! You're crushing it! 🚀",
+  ],
   
-  export interface ScoreData {
-    totalScore: number;
-    dailyScore: number;
-    currentStreak: number;
-    highestStreak: number;
-    questionsAnswered: number;
-    correctAnswers: number;
-    wrongAnswers: number;
-    accuracy: number;
-  }
+  incorrect: [
+    "Don't worry, you'll get the next one! 💪",
+    "That's okay! Learning is all about trying! 🌱",
+    "Nice try! Here's what to remember... 📚",
+    "Almost there! Keep going! 🎯",
+  ],
   
-  export interface TimerData {
-    availableTime: number;
-    totalEarnedTime: number;
-    isTimerRunning: boolean;
-    lastUpdateTime: number;
-  }
+  streak: {
+    5: "5 in a row! You're on a roll! 🔥",
+    10: "10 streak! You're unstoppable! 🚀",
+    15: "15 correct! Mind = blown! 🤯",
+    20: "20 streak! Are you a genius? 🧠",
+  },
   
-  export interface DailyGoal {
-    id: string;
-    title: string;
-    description: string;
-    target: number;
-    type: 'questions_answered' | 'correct_answers' | 'streak' | 'time_earned' | 'categories_played' | 'perfect_quiz';
-    reward: string;
-    rewardSeconds: number;
-    icon: string;
-    color: string;
-    progress: {
-      current: number;
-      completed: boolean;
-      claimedReward: boolean;
-    };
-  }
+  encouragement: [
+    "You're doing great! Keep going! 💪",
+    "Every question makes you smarter! 🧠",
+    "Believe in yourself! You've got this! 🌟",
+    "Learning is your superpower! ⚡",
+  ],
+};
+
+export const GameConfig = {
+  // Time rewards (in seconds)
+  normalAnswerReward: 30,
+  milestoneReward: 120,
+  dailyBonusReward: 300,
+  
+  // Streak milestones
+  streakMilestones: [5, 10, 15, 20, 25, 30, 40, 50],
+  
+  // Points
+  basePoints: 10,
+  streakBonusPerFive: 5,
+  milestoneBonus: 50,
+  
+  // Quiz settings
+  questionsPerSession: 10,
+  timePerQuestion: 30, // seconds
+  
+  // Animation delays
+  mascotAutoHideDelay: 5000,
+  peekingMascotInterval: 20000,
+  
+  // Storage keys
+  storageKeys: {
+    score: 'brainbites_score_data',
+    timer: 'brainbites_timer_data',
+    settings: 'brainbites_settings',
+    usedQuestions: 'brainbites_used_questions',
+    onboarding: 'brainbites_onboarding_complete',
+    achievements: 'brainbites_achievements',
+  },
+};
+
+export const Categories = [
+  { id: 'funfacts', name: 'Fun Facts', icon: 'lightbulb', color: Colors.category.funfacts },
+  { id: 'psychology', name: 'Psychology', icon: 'brain', color: Colors.category.psychology },
+  { id: 'science', name: 'Science', icon: 'flask', color: Colors.category.science },
+  { id: 'history', name: 'History', icon: 'clock', color: Colors.category.history },
+  { id: 'geography', name: 'Geography', icon: 'earth', color: Colors.category.geography },
+  { id: 'sports', name: 'Sports', icon: 'basketball', color: Colors.category.sports },
+  { id: 'arts', name: 'Arts & Culture', icon: 'palette', color: Colors.category.arts },
+  { id: 'general', name: 'General Knowledge', icon: 'book', color: Colors.category.general },
+];

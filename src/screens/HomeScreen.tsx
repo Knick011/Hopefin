@@ -1,4 +1,3 @@
-// src/screens/HomeScreen.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -7,214 +6,232 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
+  Platform,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import { NavigationProp } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { RootStackParamList } from '@/navigation/AppNavigator';
-import useStore from '@/store/useStore';
-import TimerService from '@/services/TimerService';
-import ScoreService from '@/services/ScoreService';
-import SoundService from '@/services/SoundService';
-import { Colors, Fonts, Spacing, Layout } from '@/utils/constants';
+// Import services
+import EnhancedTimerService from '../services/EnhancedTimerService';
+import ScoreService from '../services/ScoreService';
+import SoundService from '../services/SoundService';
 
-type NavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
+// Import components
+import Mascot from '../components/Mascot';
+import PeekingMascot from '../components/PeekingMascot';
 
-const HomeScreen = () => {
-  const navigation = useNavigation<NavigationProp>();
-  const { selectedDifficulty, setSelectedDifficulty, dailyLoginStreak } = useStore();
+// Import constants
+import { Colors, Categories } from '../utils/constants';
+
+interface HomeScreenProps {
+  navigation: NavigationProp<any>;
+}
+
+const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const [availableTime, setAvailableTime] = useState(0);
-  const [scoreInfo, setScoreInfo] = useState(ScoreService.getScoreInfo());
+  const [scoreInfo, setScoreInfo] = useState({
+    totalScore: 0,
+    currentStreak: 0,
+    dailyStreak: 0,
+  });
+  const [showMascot, setShowMascot] = useState(false);
+  const [mascotType, setMascotType] = useState<'happy' | 'excited' | 'thoughtful' | 'encouraging' | 'celebration' | 'sad'>('happy');
+  const [mascotMessage, setMascotMessage] = useState('');
+  const [mascotEnabled, setMascotEnabled] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   useEffect(() => {
-    // Subscribe to timer updates
-    const unsubscribe = TimerService.addEventListener((data) => {
-      setAvailableTime(data.availableTime);
-    });
-
-    // Play menu music
-    SoundService.playMenuMusic();
-
-    // Load score info
-    setScoreInfo(ScoreService.getScoreInfo());
-
+    loadData();
+    checkMascotSettings();
+    
+    // Add timer listener
+    const updateTime = (time: number) => setAvailableTime(time);
+    EnhancedTimerService.addListener(updateTime);
+    
+    // Show welcome mascot after delay
+    const timer = setTimeout(() => {
+      if (mascotEnabled) {
+        showWelcomeMascot();
+      }
+    }, 1000);
+    
     return () => {
-      unsubscribe();
+      EnhancedTimerService.removeListener(updateTime);
+      clearTimeout(timer);
     };
   }, []);
 
-  const formatTime = (seconds: number) => {
-    const hours = Math.floor(Math.abs(seconds) / 3600);
-    const minutes = Math.floor((Math.abs(seconds) % 3600) / 60);
-    const secs = Math.abs(seconds) % 60;
+  useEffect(() => {
+    // Refresh data when returning to home screen
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadData();
+      SoundService.playMenuMusic();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+
+  const loadData = async () => {
+    // Load timer data
+    const time = EnhancedTimerService.getAvailableTime();
+    setAvailableTime(time);
     
-    const prefix = seconds < 0 ? '-' : '';
-    
-    if (hours > 0) {
-      return `${prefix}${hours}h ${minutes}m`;
-    } else if (minutes > 0) {
-      return `${prefix}${minutes}m ${secs}s`;
-    } else {
-      return `${prefix}${secs}s`;
-    }
+    // Load score data
+    const score = ScoreService.getScoreInfo();
+    setScoreInfo({
+      totalScore: score.totalScore,
+      currentStreak: score.currentStreak,
+      dailyStreak: score.dailyStreak,
+    });
   };
 
-  const handleDifficultyPress = (difficulty: 'Easy' | 'Medium' | 'Hard') => {
+  const checkMascotSettings = async () => {
+    const mascotSetting = await AsyncStorage.getItem('brainbites_show_mascot');
+    setMascotEnabled(mascotSetting !== 'false');
+  };
+
+  const showWelcomeMascot = () => {
+    const messages = [
+      `Welcome back! 🌟\n\nYou have ${EnhancedTimerService.formatTime(availableTime)} of app time.\nReady to earn more?`,
+      `Hey there, knowledge seeker! 🧠\n\nYour streak is ${scoreInfo.dailyStreak} days!\nLet's keep it going!`,
+      `Great to see you! 🎯\n\nPick a category and let's learn something new today!`,
+    ];
+    
+    setMascotType('happy');
+    setMascotMessage(messages[Math.floor(Math.random() * messages.length)]);
+    setShowMascot(true);
+  };
+
+  const handleCategoryPress = (categoryId: string) => {
     SoundService.playButtonPress();
-    setSelectedDifficulty(difficulty);
-    navigation.navigate('Quiz', { category: 'All', difficulty });
+    setSelectedCategory(categoryId);
+    
+    // Navigate to quiz after a short animation
+    setTimeout(() => {
+      navigation.navigate('Quiz', { category: categoryId });
+    }, 200);
   };
 
-  const renderDifficultyButton = (
-    difficulty: 'Easy' | 'Medium' | 'Hard',
-    icon: string,
-    colors: string[],
-    delay: number
-  ) => (
-    <Animated.View
-      entering={FadeInDown.duration(600).delay(delay)}
-      style={styles.difficultyButtonWrapper}
+  const handleSettingsPress = () => {
+    SoundService.playButtonPress();
+    navigation.navigate('Settings');
+  };
+
+  const handlePeekingMascotPress = () => {
+    const stats = [
+      `📊 Your Stats:\n\n⏱️ Time: ${EnhancedTimerService.formatTime(availableTime)}\n⭐ Score: ${scoreInfo.totalScore.toLocaleString()}\n🔥 Streak: ${scoreInfo.dailyStreak} days`,
+      `Keep going! 💪\n\nYou're doing amazing!\nEvery question brings you closer to your goals!`,
+      `Fun fact! 🌟\n\nDid you know that learning new things every day can improve your memory and cognitive abilities?`,
+    ];
+    
+    setMascotType('encouraging');
+    setMascotMessage(stats[Math.floor(Math.random() * stats.length)]);
+    setShowMascot(true);
+  };
+
+  const renderTimeCard = () => (
+    <LinearGradient
+      colors={[Colors.primary, Colors.primaryDark]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.timeCard}
     >
-      <TouchableOpacity
-        onPress={() => handleDifficultyPress(difficulty)}
-        activeOpacity={0.8}
-      >
-        <LinearGradient
-          colors={colors}
-          style={styles.difficultyButton}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <Icon name={icon} size={40} color={Colors.textOnPrimary} />
-          <Text style={styles.difficultyText}>{difficulty}</Text>
-          <Text style={styles.difficultySubtext}>
-            {difficulty === 'Easy' && '1-2 grade level'}
-            {difficulty === 'Medium' && '3-5 grade level'}
-            {difficulty === 'Hard' && '6+ grade level'}
-          </Text>
-        </LinearGradient>
-      </TouchableOpacity>
-    </Animated.View>
+      <View style={styles.timeCardContent}>
+        <Icon name="timer" size={32} color="#FFFFFF" />
+        <Text style={styles.timeLabel}>Available Time</Text>
+        <Text style={styles.timeValue}>{EnhancedTimerService.formatTime(availableTime)}</Text>
+      </View>
+    </LinearGradient>
+  );
+
+  const renderStatsCards = () => (
+    <View style={styles.statsContainer}>
+      <View style={styles.statCard}>
+        <Icon name="star" size={24} color={Colors.score} />
+        <Text style={styles.statValue}>{scoreInfo.totalScore.toLocaleString()}</Text>
+        <Text style={styles.statLabel}>Total Score</Text>
+      </View>
+      
+      <View style={styles.statCard}>
+        <Icon name="fire" size={24} color={Colors.streak} />
+        <Text style={styles.statValue}>{scoreInfo.dailyStreak}</Text>
+        <Text style={styles.statLabel}>Day Streak</Text>
+      </View>
+    </View>
+  );
+
+  const renderCategories = () => (
+    <View style={styles.categoriesContainer}>
+      <Text style={styles.sectionTitle}>Choose a Category</Text>
+      <View style={styles.categoriesGrid}>
+        {Categories.map((category) => (
+          <TouchableOpacity
+            key={category.id}
+            style={[
+              styles.categoryCard,
+              selectedCategory === category.id && styles.categoryCardSelected,
+            ]}
+            onPress={() => handleCategoryPress(category.id)}
+            activeOpacity={0.7}
+          >
+            <LinearGradient
+              colors={[category.color, category.color + 'DD']}
+              style={styles.categoryGradient}
+            >
+              <Icon name={category.icon} size={32} color="#FFFFFF" />
+              <Text style={styles.categoryName}>{category.name}</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Header */}
-        <Animated.View entering={FadeIn.duration(600)} style={styles.header}>
-          <Text style={styles.title}>BrainBites</Text>
-          <TouchableOpacity
-            onPress={() => {
-              SoundService.playButtonPress();
-              navigation.navigate('Settings');
-            }}
-          >
-            <Icon name="cog" size={28} color={Colors.textPrimary} />
+        <View style={styles.header}>
+          <Text style={styles.appTitle}>BrainBites</Text>
+          <TouchableOpacity onPress={handleSettingsPress} style={styles.settingsButton}>
+            <Icon name="cog" size={24} color={Colors.textPrimary} />
           </TouchableOpacity>
-        </Animated.View>
+        </View>
+
+        {/* Time Card */}
+        {renderTimeCard()}
 
         {/* Stats Cards */}
-        <Animated.View
-          entering={FadeInDown.duration(600).delay(200)}
-          style={styles.statsContainer}
-        >
-          <View style={styles.statCard}>
-            <Icon name="timer" size={24} color={Colors.warning} />
-            <Text style={styles.statValue}>{formatTime(availableTime)}</Text>
-            <Text style={styles.statLabel}>Available</Text>
-          </View>
-          
-          <View style={styles.statCard}>
-            <Icon name="fire" size={24} color={Colors.error} />
-            <Text style={styles.statValue}>{dailyLoginStreak}</Text>
-            <Text style={styles.statLabel}>Day Streak</Text>
-          </View>
-          
-          <View style={styles.statCard}>
-            <Icon name="trophy" size={24} color={Colors.success} />
-            <Text style={styles.statValue}>{scoreInfo.totalScore}</Text>
-            <Text style={styles.statLabel}>Total Score</Text>
-          </View>
-        </Animated.View>
+        {renderStatsCards()}
 
-        {/* Quick Actions */}
-        <Animated.View
-          entering={FadeInDown.duration(600).delay(400)}
-          style={styles.quickActions}
-        >
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => {
-              SoundService.playButtonPress();
-              navigation.navigate('DailyGoals');
-            }}
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={[Colors.info, '#7986CB']}
-              style={styles.actionGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            >
-              <Icon name="target" size={24} color={Colors.textOnPrimary} />
-              <Text style={styles.actionText}>Daily Goals</Text>
-              <Icon name="chevron-right" size={24} color={Colors.textOnPrimary} />
-            </LinearGradient>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => {
-              SoundService.playButtonPress();
-              navigation.navigate('Leaderboard');
-            }}
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={[Colors.accent, '#FFC107']}
-              style={styles.actionGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            >
-              <Icon name="podium" size={24} color={Colors.textPrimary} />
-              <Text style={[styles.actionText, { color: Colors.textPrimary }]}>
-                Leaderboard
-              </Text>
-              <Icon name="chevron-right" size={24} color={Colors.textPrimary} />
-            </LinearGradient>
-          </TouchableOpacity>
-        </Animated.View>
-
-        {/* Difficulty Selection */}
-        <Animated.View
-          entering={FadeInDown.duration(600).delay(600)}
-          style={styles.sectionContainer}
-        >
-          <Text style={styles.sectionTitle}>Choose Your Challenge</Text>
-          
-          {renderDifficultyButton(
-            'Easy',
-            'emoticon-happy',
-            [Colors.easy, '#44B5AD'],
-            700
-          )}
-          {renderDifficultyButton(
-            'Medium',
-            'emoticon-neutral',
-            [Colors.medium, '#FF9800'],
-            800
-          )}
-          {renderDifficultyButton(
-            'Hard',
-            'emoticon-cool',
-            [Colors.hard, '#FF5252'],
-            900
-          )}
-        </Animated.View>
+        {/* Categories */}
+        {renderCategories()}
       </ScrollView>
+
+      {/* Mascot */}
+      {showMascot && mascotEnabled && (
+        <Mascot
+          type={mascotType}
+          message={mascotMessage}
+          onDismiss={() => setShowMascot(false)}
+          position="bottom"
+          autoHide={true}
+          autoHideDelay={5000}
+        />
+      )}
+
+      {/* Peeking Mascot */}
+      {!showMascot && mascotEnabled && (
+        <PeekingMascot
+          onPress={handlePeekingMascotPress}
+          side="left"
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -224,97 +241,119 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 40,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    marginBottom: 24,
   },
-  title: {
-    fontSize: Fonts.sizes.xxl,
-    fontWeight: Fonts.weights.bold,
+  appTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
     color: Colors.primary,
+    fontFamily: Platform.OS === 'ios' ? 'Avenir-Heavy' : 'sans-serif-black',
+  },
+  settingsButton: {
+    padding: 8,
+  },
+  timeCard: {
+    borderRadius: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  timeCardContent: {
+    padding: 24,
+    alignItems: 'center',
+  },
+  timeLabel: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    opacity: 0.9,
+    marginTop: 8,
+  },
+  timeValue: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginTop: 4,
   },
   statsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.lg,
+    justifyContent: 'space-between',
+    marginBottom: 32,
   },
   statCard: {
-    backgroundColor: Colors.surface,
-    padding: Spacing.md,
-    borderRadius: Layout.borderRadius.large,
-    alignItems: 'center',
     flex: 1,
-    marginHorizontal: Spacing.xs,
-    ...Layout.shadow.medium,
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    marginHorizontal: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   statValue: {
-    fontSize: Fonts.sizes.xl,
-    fontWeight: Fonts.weights.bold,
+    fontSize: 24,
+    fontWeight: 'bold',
     color: Colors.textPrimary,
-    marginVertical: Spacing.xs,
+    marginTop: 8,
   },
   statLabel: {
-    fontSize: Fonts.sizes.sm,
+    fontSize: 12,
     color: Colors.textSecondary,
-  },
-  quickActions: {
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.xl,
-    gap: Spacing.md,
-  },
-  actionButton: {
-    width: '100%',
-  },
-  actionGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: Spacing.md,
-    borderRadius: Layout.borderRadius.large,
-  },
-  actionText: {
-    fontSize: Fonts.sizes.lg,
-    fontWeight: Fonts.weights.semibold,
-    color: Colors.textOnPrimary,
-    flex: 1,
-    marginLeft: Spacing.md,
-  },
-  sectionContainer: {
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.xl,
+    marginTop: 4,
   },
   sectionTitle: {
-    fontSize: Fonts.sizes.xl,
-    fontWeight: Fonts.weights.bold,
+    fontSize: 20,
+    fontWeight: 'bold',
     color: Colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: Spacing.lg,
+    marginBottom: 16,
   },
-  difficultyButtonWrapper: {
-    marginBottom: Spacing.md,
+  categoriesContainer: {
+    marginBottom: 24,
   },
-  difficultyButton: {
+  categoriesGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  categoryCard: {
+    width: '48%',
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  categoryCardSelected: {
+    transform: [{ scale: 0.95 }],
+  },
+  categoryGradient: {
+    padding: 20,
     alignItems: 'center',
-    padding: Spacing.lg,
-    borderRadius: Layout.borderRadius.large,
-    ...Layout.shadow.medium,
+    minHeight: 100,
+    justifyContent: 'center',
   },
-  difficultyText: {
-    fontSize: Fonts.sizes.xl,
-    fontWeight: Fonts.weights.bold,
-    color: Colors.textOnPrimary,
-    flex: 1,
-    marginLeft: Spacing.md,
-  },
-  difficultySubtext: {
-    fontSize: Fonts.sizes.sm,
-    color: Colors.textOnPrimary,
-    opacity: 0.8,
+  categoryName: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginTop: 8,
+    textAlign: 'center',
   },
 });
 

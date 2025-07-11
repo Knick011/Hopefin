@@ -1,4 +1,3 @@
-// src/screens/QuizScreen.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -6,291 +5,458 @@ import {
   StyleSheet,
   TouchableOpacity,
   SafeAreaView,
-  Alert,
+  ActivityIndicator,
+  Animated,
+  Easing,
+  ScrollView,
+  StatusBar,
+  Platform,
   BackHandler,
-  Dimensions,
+  Alert,
 } from 'react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
-import Animated, {
-  FadeIn,
-  FadeOut,
-  SlideInRight,
-  SlideOutLeft,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withSequence,
-  runOnJS,
-} from 'react-native-reanimated';
+import { NavigationProp, RouteProp } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { RootStackParamList } from '@/navigation/AppNavigator';
-import { Colors, Fonts, Spacing, Layout, Question } from '@/utils/constants';
-import QuizService from '@/services/QuizService';
-import TimerService from '@/services/TimerService';
-import ScoreService from '@/services/ScoreService';
-import SoundService from '@/services/SoundService';
-import useStore from '@/store/useStore';
+// Import services
+import QuizService from '../services/QuizService';
+import EnhancedTimerService from '../services/EnhancedTimerService';
+import SoundService from '../services/SoundService';
+import ScoreService from '../services/ScoreService';
 
-const { width } = Dimensions.get('window');
+// Import components
+import Mascot from '../components/Mascot';
+import PeekingMascot from '../components/PeekingMascot';
 
-type NavigationProp = StackNavigationProp<RootStackParamList, 'Quiz'>;
-type RoutePropType = RouteProp<RootStackParamList, 'Quiz'>;
+// Types
+interface QuizScreenProps {
+  navigation: NavigationProp<any>;
+  route: RouteProp<any, any>;
+}
 
-const QuizScreen = () => {
-  const navigation = useNavigation<NavigationProp>();
-  const route = useRoute<RoutePropType>();
-  const { category, difficulty } = route.params;
-  
-  const { setCurrentStreak } = useStore();
-  
+interface Question {
+  id: number;
+  category: string;
+  question: string;
+  options: {
+    A: string;
+    B: string;
+    C: string;
+    D: string;
+  };
+  correctAnswer: string;
+  explanation: string;
+}
+
+const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
   // Quiz state
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [questionNumber, setQuestionNumber] = useState(1);
-  const [streakCount, setStreakCount] = useState(0);
-  const [timeEarned, setTimeEarned] = useState(0);
-  const [sessionStats, setSessionStats] = useState({
-    totalQuestions: 0,
-    correctAnswers: 0,
-    wrongAnswers: 0,
-  });
+  
+  // Progress state
+  const [streak, setStreak] = useState(0);
+  const [questionsAnswered, setQuestionsAnswered] = useState(0);
+  const [correctAnswers, setCorrectAnswers] = useState(0);
+  const [category] = useState(route.params?.category || 'funfacts');
+  
+  // Points and rewards
+  const [showPointsAnimation, setShowPointsAnimation] = useState(false);
+  const [pointsEarned, setPointsEarned] = useState(0);
+  const [totalScore, setTotalScore] = useState(0);
+  const [streakLevel, setStreakLevel] = useState(0);
+  const [isStreakMilestone, setIsStreakMilestone] = useState(false);
+  
+  // Mascot state
+  const [showMascot, setShowMascot] = useState(false);
+  const [mascotType, setMascotType] = useState<'happy' | 'excited' | 'thoughtful' | 'encouraging' | 'celebration' | 'sad'>('happy');
+  const [mascotMessage, setMascotMessage] = useState('');
+  const [mascotEnabled, setMascotEnabled] = useState(true);
   
   // Animation values
-  const buttonScales = {
-    A: useSharedValue(1),
-    B: useSharedValue(1),
-    C: useSharedValue(1),
-    D: useSharedValue(1),
-  };
-  const progressWidth = useSharedValue(0);
-  const streakScale = useSharedValue(1);
-
-  // Move useAnimatedStyle hooks to top level
-  const buttonAnimatedStyles = {
-    A: useAnimatedStyle(() => ({
-      transform: [{ scale: buttonScales.A.value }],
-    })),
-    B: useAnimatedStyle(() => ({
-      transform: [{ scale: buttonScales.B.value }],
-    })),
-    C: useAnimatedStyle(() => ({
-      transform: [{ scale: buttonScales.C.value }],
-    })),
-    D: useAnimatedStyle(() => ({
-      transform: [{ scale: buttonScales.D.value }],
-    })),
-  };
-  const progressAnimatedStyle = useAnimatedStyle(() => ({
-    width: `${progressWidth.value}%`,
-  }));
-  const streakAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: streakScale.value }],
-  }));
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const pointsAnim = useRef(new Animated.Value(0)).current;
+  const pointsSlideAnim = useRef(new Animated.Value(0)).current;
+  const explanationAnim = useRef(new Animated.Value(0)).current;
+  
+  // Create animation values for each option
+  const optionAnims = useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]).current;
   
   useEffect(() => {
-    loadNewQuestion();
+    initializeQuiz();
     
     // Handle back button
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleGoBack();
+      return true;
+    });
     
-    return () => {
-      backHandler.remove();
-      SoundService.stopMusic();
-    };
+    return () => backHandler.remove();
   }, []);
   
-  useEffect(() => {
-    // Update progress animation
-    const progress = (sessionStats.correctAnswers / Math.max(1, sessionStats.totalQuestions)) * 100;
-    progressWidth.value = withSpring(progress);
-  }, [sessionStats]);
-  
-  const loadNewQuestion = () => {
-    const question = QuizService.getRandomQuestion(category, difficulty);
-    
-    if (!question) {
-      Alert.alert(
-        'No Questions Available',
-        'Unable to load questions. Please try again.',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
-      return;
+  const initializeQuiz = async () => {
+    try {
+      // Load quiz data
+      await QuizService.initialize();
+      
+      // Load user preferences
+      const mascotSetting = await AsyncStorage.getItem('brainbites_show_mascot');
+      if (mascotSetting !== null) {
+        setMascotEnabled(mascotSetting === 'true');
+      }
+      
+      // Load score info
+      const scoreInfo = ScoreService.getScoreInfo();
+      setTotalScore(scoreInfo.totalScore);
+      setStreak(scoreInfo.currentStreak);
+      
+      // Load first question
+      loadQuestion();
+      
+      // Show welcome mascot after a delay
+      setTimeout(() => {
+        if (mascotEnabled) {
+          setMascotType('happy');
+          setMascotMessage('Welcome to the quiz! 🎯\n\nTake your time and think carefully. You\'ve got this! 💪');
+          setShowMascot(true);
+        }
+      }, 1000);
+    } catch (error) {
+      console.error('Error initializing quiz:', error);
+      Alert.alert('Error', 'Failed to load quiz. Please try again.');
+      navigation.goBack();
     }
-    
-    setCurrentQuestion(question);
+  };
+  
+  const loadQuestion = async () => {
+    setIsLoading(true);
     setSelectedAnswer(null);
     setIsCorrect(null);
     setShowExplanation(false);
+    
+    // Reset animations
+    fadeAnim.setValue(0);
+    slideAnim.setValue(50);
+    scaleAnim.setValue(0.95);
+    optionAnims.forEach(anim => anim.setValue(0));
+    
+    try {
+      const question = await QuizService.getRandomQuestion(category);
+      if (question) {
+        setCurrentQuestion(question);
+        
+        // Animate question entrance
+        Animated.parallel([
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(slideAnim, {
+            toValue: 0,
+            duration: 400,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.spring(scaleAnim, {
+            toValue: 1,
+            friction: 8,
+            tension: 40,
+            useNativeDriver: true,
+          }),
+        ]).start();
+        
+        // Animate options with stagger
+        const staggerDelay = 100;
+        optionAnims.forEach((anim, index) => {
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: 300,
+            delay: 300 + (index * staggerDelay),
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }).start();
+        });
+        
+        setIsLoading(false);
+      } else {
+        // No more questions
+        Alert.alert(
+          'Quiz Complete!',
+          'You\'ve answered all available questions in this category.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      }
+    } catch (error) {
+      console.error('Error loading question:', error);
+      setIsLoading(false);
+    }
   };
   
-  const handleAnswerSelect = async (option: string) => {
-    if (selectedAnswer) return;
+  const handleAnswerSelect = async (answer: string) => {
+    if (selectedAnswer !== null) return;
     
-    // Animate button press
-    buttonScales[option as keyof typeof buttonScales].value = withSequence(
-      withSpring(0.9),
-      withSpring(1)
-    );
+    // Play selection sound
+    SoundService.playButtonPress();
     
-    const correct = option === currentQuestion?.correctAnswer;
-    
-    setSelectedAnswer(option);
+    setSelectedAnswer(answer);
+    const correct = answer === currentQuestion?.correctAnswer;
     setIsCorrect(correct);
-    setShowExplanation(true);
     
-    // Update session stats
-    const newStats = {
-      ...sessionStats,
-      totalQuestions: sessionStats.totalQuestions + 1,
-      correctAnswers: correct ? sessionStats.correctAnswers + 1 : sessionStats.correctAnswers,
-      wrongAnswers: correct ? sessionStats.wrongAnswers : sessionStats.wrongAnswers + 1,
-    };
-    setSessionStats(newStats);
+    // Update statistics
+    setQuestionsAnswered(prev => prev + 1);
     
     if (correct) {
-      SoundService.playCorrect();
+      // Play success sound
+      SoundService.playCorrectAnswer();
       
-      // Update streak
-      const newStreak = streakCount + 1;
-      setStreakCount(newStreak);
-      setCurrentStreak(newStreak);
+      // Update correct answers and streak
+      setCorrectAnswers(prev => prev + 1);
+      const newStreak = streak + 1;
+      setStreak(newStreak);
       
-      // Animate streak
-      streakScale.value = withSequence(
-        withSpring(1.2),
-        withSpring(1)
-      );
+      // Check for milestone
+      const milestone = checkStreakMilestone(newStreak);
+      setIsStreakMilestone(milestone);
       
-      // Calculate time earned
-      const baseTime = 30;
-      let bonusTime = 0;
-      
-      if (ScoreService.checkStreakMilestone(newStreak)) {
-        bonusTime = 120; // 2 minutes bonus
-        SoundService.playStreak();
-      }
-      
-      const totalTimeAdded = baseTime + bonusTime;
-      await TimerService.addEarnedTime(totalTimeAdded);
-      setTimeEarned(timeEarned + totalTimeAdded);
+      // Calculate points
+      const basePoints = 10;
+      const streakBonus = Math.floor(newStreak / 5) * 5;
+      const points = basePoints + streakBonus + (milestone ? 50 : 0);
+      setPointsEarned(points);
       
       // Update score
-      await ScoreService.addCorrectAnswer();
+      ScoreService.addPoints(points, newStreak);
+      setTotalScore(prev => prev + points);
+      
+      // Add time reward
+      const timeReward = milestone ? 120 : 30; // 2 minutes for milestone, 30 seconds otherwise
+      await EnhancedTimerService.addTime(timeReward);
+      
+      // Show points animation
+      showPointsAnimationEffect();
+      
+      // Show success mascot
+      if (mascotEnabled) {
+        showSuccessMascot(milestone);
+      }
     } else {
-      SoundService.playWrong();
+      // Play wrong answer sound
+      SoundService.playWrongAnswer();
       
       // Reset streak
-      setStreakCount(0);
-      setCurrentStreak(0);
-      await ScoreService.addWrongAnswer();
+      setStreak(0);
+      ScoreService.resetStreak();
+      
+      // Show explanation after a delay
+      setTimeout(() => {
+        setShowExplanation(true);
+        animateExplanation();
+        
+        // Show explanation mascot
+        if (mascotEnabled) {
+          showExplanationMascot();
+        }
+      }, 1000);
     }
+  };
+  
+  const checkStreakMilestone = (currentStreak: number): boolean => {
+    // Milestones at 5, 10, 15, 20, etc.
+    return currentStreak > 0 && currentStreak % 5 === 0;
+  };
+  
+  const showPointsAnimationEffect = () => {
+    setShowPointsAnimation(true);
     
-    // Auto-advance after delay
-    setTimeout(() => {
-      handleNextQuestion();
-    }, 2500);
+    Animated.parallel([
+      Animated.timing(pointsAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(pointsSlideAnim, {
+        toValue: -30,
+        duration: 1000,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setTimeout(() => {
+        Animated.timing(pointsAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start(() => {
+          setShowPointsAnimation(false);
+          pointsSlideAnim.setValue(0);
+        });
+      }, 1500);
+    });
   };
   
-  const handleNextQuestion = () => {
-    setQuestionNumber(questionNumber + 1);
-    loadNewQuestion();
+  const animateExplanation = () => {
+    Animated.spring(explanationAnim, {
+      toValue: 1,
+      friction: 8,
+      tension: 40,
+      useNativeDriver: true,
+    }).start();
   };
   
-  const handleSkipQuestion = () => {
+  const showSuccessMascot = (milestone: boolean) => {
+    if (milestone) {
+      setMascotType('celebration');
+      setMascotMessage(`🎉 AMAZING! ${streak} in a row! 🎉\n\nYou earned 2 bonus minutes of app time!\n\nKeep this streak going! 🔥`);
+    } else {
+      const messages = [
+        'Correct! Well done! 🌟',
+        'You got it! Great job! 👏',
+        'Excellent! Keep it up! 💪',
+        'Perfect! You\'re on fire! 🔥',
+        'Brilliant answer! 🧠',
+      ];
+      setMascotType('excited');
+      setMascotMessage(messages[Math.floor(Math.random() * messages.length)]);
+    }
+    setShowMascot(true);
+  };
+  
+  const showExplanationMascot = () => {
+    if (!currentQuestion) return;
+    
+    setMascotType('thoughtful');
+    setMascotMessage(`The correct answer was "${currentQuestion.correctAnswer}".\n\n${currentQuestion.explanation}\n\nDon't worry, you'll get the next one! 💪`);
+    setShowMascot(true);
+  };
+  
+  const handleContinue = () => {
+    // Play button sound
     SoundService.playButtonPress();
-    handleNextQuestion();
+    
+    // Hide mascot
+    setShowMascot(false);
+    
+    // Load next question
+    loadQuestion();
   };
   
-  const handleBackPress = () => {
+  const handleGoBack = () => {
     Alert.alert(
-      'Exit Quiz?',
-      'Your progress will be saved.',
+      'Leave Quiz?',
+      'Your progress will be saved. Are you sure you want to leave?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Exit', 
+        {
+          text: 'Leave',
+          style: 'destructive',
           onPress: () => {
+            SoundService.playButtonPress();
             navigation.goBack();
-          }
+          },
         },
       ]
     );
-    return true;
   };
   
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+  const handleMascotDismiss = () => {
+    setShowMascot(false);
   };
   
-  const renderOption = (option: 'A' | 'B' | 'C' | 'D') => {
-    const isSelected = selectedAnswer === option;
-    const isCorrectOption = option === currentQuestion?.correctAnswer;
+  const handlePeekingMascotPress = () => {
+    if (!mascotEnabled) return;
+    
+    setMascotType('encouraging');
+    setMascotMessage(`You're doing great! 💪\n\n🔥 Current streak: ${streak}\n⭐ Score: ${totalScore.toLocaleString()}\n✅ Correct: ${correctAnswers}/${questionsAnswered}`);
+    setShowMascot(true);
+  };
+  
+  const renderOption = (optionKey: string, index: number) => {
+    if (!currentQuestion) return null;
+    
+    const option = currentQuestion.options[optionKey as keyof typeof currentQuestion.options];
+    const isSelected = selectedAnswer === optionKey;
+    const isCorrectOption = optionKey === currentQuestion.correctAnswer;
     const showResult = selectedAnswer !== null;
     
-    let colors = ['#FFFFFF', '#F5F5F5'];
-    let textColor = Colors.textPrimary;
+    let backgroundColor = '#FFFFFF';
+    let borderColor = '#E0E0E0';
+    let textColor = '#333333';
     let iconName = null;
+    let iconColor = '#FFFFFF';
     
     if (showResult) {
       if (isCorrectOption) {
-        colors = [Colors.success, '#44B5AD'];
-        textColor = Colors.textOnPrimary;
+        backgroundColor = '#4CAF50';
+        borderColor = '#4CAF50';
+        textColor = '#FFFFFF';
         iconName = 'check-circle';
+        iconColor = '#FFFFFF';
       } else if (isSelected && !isCorrect) {
-        colors = [Colors.error, '#FF5252'];
-        textColor = Colors.textOnPrimary;
+        backgroundColor = '#F44336';
+        borderColor = '#F44336';
+        textColor = '#FFFFFF';
         iconName = 'close-circle';
+        iconColor = '#FFFFFF';
       }
+    } else if (isSelected) {
+      borderColor = '#FF9F1C';
     }
-    // Use the precomputed animated style
-    const animatedStyle = buttonAnimatedStyles[option];
     
     return (
       <Animated.View
-        key={option}
-        entering={SlideInRight.delay(100 * ['A', 'B', 'C', 'D'].indexOf(option))}
-        style={[styles.optionWrapper, animatedStyle]}
+        key={optionKey}
+        style={[
+          styles.optionContainer,
+          {
+            opacity: optionAnims[index],
+            transform: [{
+              translateX: optionAnims[index].interpolate({
+                inputRange: [0, 1],
+                outputRange: [50, 0],
+              }),
+            }],
+          },
+        ]}
       >
         <TouchableOpacity
-          onPress={() => handleAnswerSelect(option)}
+          style={[
+            styles.option,
+            { backgroundColor, borderColor },
+          ]}
+          onPress={() => handleAnswerSelect(optionKey)}
           disabled={selectedAnswer !== null}
-          activeOpacity={0.8}
+          activeOpacity={0.7}
         >
-          <LinearGradient
-            colors={colors}
-            style={[
-              styles.optionButton,
-              showResult && !isCorrectOption && !isSelected && styles.optionDisabled,
-            ]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-          >
-            <View style={[styles.optionLabel, { backgroundColor: colors[0] }]}> 
-              <Text style={[styles.optionLetter, { color: textColor }]}>{option}</Text>
+          <View style={styles.optionContent}>
+            <View style={[styles.optionLabel, { backgroundColor: borderColor }]}>
+              <Text style={[styles.optionLabelText, { color: textColor }]}>{optionKey}</Text>
             </View>
-            <Text style={[styles.optionText, { color: textColor }]}> 
-              {currentQuestion?.options[option]}
-            </Text>
+            <Text style={[styles.optionText, { color: textColor }]}>{option}</Text>
             {iconName && (
-              <Icon name={iconName} size={24} color={textColor} />
+              <Icon name={iconName} size={24} color={iconColor} style={styles.optionIcon} />
             )}
-          </LinearGradient>
+          </View>
         </TouchableOpacity>
       </Animated.View>
     );
   };
   
-  if (!currentQuestion) {
+  if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF9F1C" />
           <Text style={styles.loadingText}>Loading question...</Text>
         </View>
       </SafeAreaView>
@@ -298,104 +464,158 @@ const QuizScreen = () => {
   }
   
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFF8E7" />
+      
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-            <Icon name="close" size={28} color={Colors.textPrimary} />
+          <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
+            <Icon name="arrow-left" size={24} color="#333" />
           </TouchableOpacity>
           
-          <View style={styles.headerCenter}>
-            <Text style={styles.categoryText}>{category} • {difficulty}</Text>
-            <Text style={styles.questionNumber}>Question {questionNumber}</Text>
+          <View style={styles.statsContainer}>
+            <Icon name="fire" size={20} color="#FF6B6B" />
+            <Text style={styles.statsText}>{streak}</Text>
           </View>
           
-          <View style={styles.headerRight} />
+          <View style={styles.scoreContainer}>
+            <Icon name="star" size={20} color="#FFD700" />
+            <Text style={styles.scoreText}>{totalScore.toLocaleString()}</Text>
+          </View>
         </View>
         
-        {/* Progress Bar */}
+        {/* Progress bar */}
         <View style={styles.progressContainer}>
           <View style={styles.progressBar}>
-            <Animated.View style={[styles.progressFill, progressAnimatedStyle]} />
+            <View
+              style={[
+                styles.progressFill,
+                { width: `${(correctAnswers / Math.max(questionsAnswered, 1)) * 100}%` },
+              ]}
+            />
           </View>
-        </View>
-        
-        {/* Stats Bar */}
-        <View style={styles.statsBar}>
-          <View style={styles.statItem}>
-            <Icon name="fire" size={20} color={Colors.error} />
-            <Animated.Text style={[styles.statValue, streakAnimatedStyle]}>
-              {streakCount}
-            </Animated.Text>
-          </View>
-          
-          <View style={styles.statItem}>
-            <Icon name="timer" size={20} color={Colors.primary} />
-            <Text style={styles.statValue}>+{formatTime(timeEarned)}</Text>
-          </View>
-          
-          <View style={styles.statItem}>
-            <Icon name="check" size={20} color={Colors.success} />
-            <Text style={styles.statValue}>
-              {sessionStats.correctAnswers}/{sessionStats.totalQuestions}
-            </Text>
-          </View>
+          <Text style={styles.progressText}>
+            {correctAnswers}/{questionsAnswered} correct
+          </Text>
         </View>
         
         {/* Question */}
         <Animated.View
-          entering={FadeIn}
-          exiting={FadeOut}
-          style={styles.questionContainer}
+          style={[
+            styles.questionContainer,
+            {
+              opacity: fadeAnim,
+              transform: [
+                { translateY: slideAnim },
+                { scale: scaleAnim },
+              ],
+            },
+          ]}
         >
-          <Text style={styles.questionText}>{currentQuestion.question}</Text>
+          <Text style={styles.categoryText}>{category.toUpperCase()}</Text>
+          <Text style={styles.questionText}>{currentQuestion?.question}</Text>
         </Animated.View>
         
         {/* Options */}
         <View style={styles.optionsContainer}>
-          {(['A', 'B', 'C', 'D'] as const).map(renderOption)}
+          {['A', 'B', 'C', 'D'].map((option, index) => renderOption(option, index))}
         </View>
         
         {/* Explanation */}
         {showExplanation && (
           <Animated.View
-            entering={FadeIn}
-            style={styles.explanationContainer}
+            style={[
+              styles.explanationContainer,
+              {
+                opacity: explanationAnim,
+                transform: [{
+                  scale: explanationAnim,
+                }],
+              },
+            ]}
           >
-            <Icon
-              name={isCorrect ? 'lightbulb-on' : 'information'}
-              size={24}
-              color={isCorrect ? Colors.success : Colors.warning}
-            />
-            <Text style={styles.explanationText}>{currentQuestion.explanation}</Text>
+            <Icon name="lightbulb-outline" size={24} color="#FF9F1C" />
+            <Text style={styles.explanationTitle}>Explanation</Text>
+            <Text style={styles.explanationText}>{currentQuestion?.explanation}</Text>
           </Animated.View>
         )}
         
-        {/* Skip Button */}
-        {!selectedAnswer && (
-          <TouchableOpacity
-            style={styles.skipButton}
-            onPress={handleSkipQuestion}
-            activeOpacity={0.7}
+        {/* Points animation */}
+        {showPointsAnimation && (
+          <Animated.View
+            style={[
+              styles.pointsAnimation,
+              {
+                opacity: pointsAnim,
+                transform: [{
+                  translateY: pointsSlideAnim,
+                }],
+              },
+            ]}
           >
-            <Text style={styles.skipText}>Skip Question</Text>
-            <Icon name="chevron-right" size={20} color={Colors.textSecondary} />
+            <Icon name="star" size={20} color="#FFD700" style={styles.pointsIcon} />
+            <Text style={styles.pointsText}>+{pointsEarned}</Text>
+          </Animated.View>
+        )}
+        
+        {/* Continue button */}
+        {selectedAnswer !== null && (
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={handleContinue}
+          >
+            <LinearGradient
+              colors={['#FF9F1C', '#FF7043']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.continueButtonGradient}
+            >
+              <Text style={styles.continueButtonText}>Next Question</Text>
+              <Icon name="arrow-right" size={20} color="#FFFFFF" />
+            </LinearGradient>
           </TouchableOpacity>
         )}
-      </View>
+      </ScrollView>
+      
+      {/* Mascot */}
+      {showMascot && mascotEnabled && (
+        <Mascot
+          type={mascotType}
+          message={mascotMessage}
+          onDismiss={handleMascotDismiss}
+          position="bottom"
+          autoHide={true}
+          autoHideDelay={5000}
+        />
+      )}
+      
+      {/* Peeking Mascot */}
+      {!showMascot && mascotEnabled && (
+        <PeekingMascot
+          onPress={handlePeekingMascotPress}
+          side="right"
+        />
+      )}
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFF8E7',
+  },
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: Spacing.lg,
+  contentContainer: {
+    padding: 20,
+    paddingBottom: 40,
   },
   loadingContainer: {
     flex: 1,
@@ -403,99 +623,119 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: Fonts.sizes.lg,
-    color: Colors.textSecondary,
+    marginTop: 16,
+    fontSize: 18,
+    color: '#777',
+    fontFamily: Platform.OS === 'ios' ? 'Avenir-Medium' : 'sans-serif-medium',
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: Spacing.md,
+    alignItems: 'center',
+    marginBottom: 20,
   },
   backButton: {
-    padding: Spacing.xs,
+    padding: 8,
   },
-  headerCenter: {
-    flex: 1,
+  statsContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
-  headerRight: {
-    width: 36,
+  statsText: {
+    marginLeft: 6,
+    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#333',
   },
-  categoryText: {
-    fontSize: Fonts.sizes.sm,
-    color: Colors.textSecondary,
+  scoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
-  questionNumber: {
-    fontSize: Fonts.sizes.md,
-    fontWeight: Fonts.weights.bold,
-    color: Colors.textPrimary,
-    marginTop: 2,
+  scoreText: {
+    marginLeft: 6,
+    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#333',
   },
   progressContainer: {
-    marginBottom: Spacing.md,
+    marginBottom: 24,
   },
   progressBar: {
-    height: 6,
+    height: 8,
     backgroundColor: '#E0E0E0',
-    borderRadius: 3,
+    borderRadius: 4,
     overflow: 'hidden',
+    marginBottom: 8,
   },
   progressFill: {
     height: '100%',
-    backgroundColor: Colors.primary,
-    borderRadius: 3,
+    backgroundColor: '#4CAF50',
+    borderRadius: 4,
   },
-  statsBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: Spacing.lg,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Layout.borderRadius.large,
-    gap: Spacing.xs,
-    ...Layout.shadow.small,
-  },
-  statValue: {
-    fontSize: Fonts.sizes.md,
-    fontWeight: Fonts.weights.semibold,
-    color: Colors.textPrimary,
+  progressText: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
   },
   questionContainer: {
-    backgroundColor: Colors.surface,
-    padding: Spacing.xl,
-    borderRadius: Layout.borderRadius.large,
-    marginBottom: Spacing.xl,
-    minHeight: 120,
-    justifyContent: 'center',
-    ...Layout.shadow.medium,
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  categoryText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#FF9F1C',
+    marginBottom: 12,
+    letterSpacing: 1,
   },
   questionText: {
-    fontSize: Fonts.sizes.lg,
-    color: Colors.textPrimary,
-    textAlign: 'center',
+    fontSize: 18,
     lineHeight: 26,
+    color: '#333',
+    fontFamily: Platform.OS === 'ios' ? 'Avenir-Medium' : 'sans-serif-medium',
   },
   optionsContainer: {
-    marginBottom: Spacing.lg,
+    marginBottom: 24,
   },
-  optionWrapper: {
-    marginBottom: Spacing.sm,
+  optionContainer: {
+    marginBottom: 12,
   },
-  optionButton: {
+  option: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    overflow: 'hidden',
+  },
+  optionContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: Spacing.md,
-    borderRadius: Layout.borderRadius.medium,
-    ...Layout.shadow.small,
-  },
-  optionDisabled: {
-    opacity: 0.5,
+    padding: 16,
   },
   optionLabel: {
     width: 32,
@@ -503,44 +743,80 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: Spacing.md,
-    opacity: 0.9,
+    marginRight: 12,
   },
-  optionLetter: {
-    fontSize: Fonts.sizes.md,
-    fontWeight: Fonts.weights.bold,
+  optionLabelText: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   optionText: {
     flex: 1,
-    fontSize: Fonts.sizes.md,
+    fontSize: 16,
     lineHeight: 22,
+    color: '#333',
+  },
+  optionIcon: {
+    marginLeft: 12,
   },
   explanationContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: Colors.surface,
-    padding: Spacing.md,
-    borderRadius: Layout.borderRadius.medium,
-    marginBottom: Spacing.lg,
-    gap: Spacing.sm,
-    ...Layout.shadow.small,
+    backgroundColor: '#FFF3E0',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  explanationTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FF9F1C',
+    marginTop: 8,
+    marginBottom: 8,
   },
   explanationText: {
-    flex: 1,
-    fontSize: Fonts.sizes.sm,
-    color: Colors.textSecondary,
+    fontSize: 14,
     lineHeight: 20,
+    color: '#666',
+    textAlign: 'center',
   },
-  skipButton: {
+  pointsAnimation: {
+    position: 'absolute',
+    top: 100,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.md,
-    gap: Spacing.xs,
+    backgroundColor: '#FFD700',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
-  skipText: {
-    fontSize: Fonts.sizes.md,
-    color: Colors.textSecondary,
+  pointsIcon: {
+    marginRight: 8,
+  },
+  pointsText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  continueButton: {
+    marginTop: 'auto',
+  },
+  continueButtonGradient: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderRadius: 12,
+  },
+  continueButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginRight: 8,
   },
 });
 

@@ -1,218 +1,267 @@
-// src/screens/SettingsScreen.tsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
-  ScrollView,
   Switch,
+  ScrollView,
+  SafeAreaView,
+  Alert,
+  Platform,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NavigationProp } from '@react-navigation/native';
 
-import { RootStackParamList } from '@/navigation/AppNavigator';
-import useStore from '@/store/useStore';
-import { Colors, Fonts, Spacing, Layout } from '@/utils/constants';
-import SoundService from '@/services/SoundService';
+// Import services
+import EnhancedTimerService from '../services/EnhancedTimerService';
+import QuizService from '../services/QuizService';
+import SoundService from '../services/SoundService';
+import ScoreService from '../services/ScoreService';
 
-type NavigationProp = StackNavigationProp<RootStackParamList, 'Settings'>;
+// Import constants
+import { Colors } from '../utils/constants';
 
-const SettingsScreen = () => {
-  const navigation = useNavigation<NavigationProp>();
-  const { 
-    soundEnabled, 
-    setSoundEnabled, 
-    musicEnabled, 
-    setMusicEnabled,
-    notificationsEnabled,
-    setNotificationsEnabled,
-    dailyLoginStreak,
-    resetStore
-  } = useStore();
+interface SettingsScreenProps {
+  navigation: NavigationProp<any>;
+}
 
-  const handleBackPress = () => {
+const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) => {
+  const [showMascot, setShowMascot] = useState(true);
+  const [soundsEnabled, setSoundsEnabled] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [scoreInfo, setScoreInfo] = useState({
+    totalScore: 0,
+    highestStreak: 0,
+    questionsAnswered: 0,
+  });
+
+  useEffect(() => {
+    loadSettings();
+    loadStats();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      // Load mascot setting
+      const mascotEnabled = await AsyncStorage.getItem('brainbites_show_mascot');
+      if (mascotEnabled !== null) {
+        setShowMascot(mascotEnabled !== 'false');
+      }
+
+      // Load sounds setting
+      const sounds = await SoundService.isSoundsEnabled();
+      setSoundsEnabled(sounds);
+
+      // Load notifications setting
+      const notifications = await AsyncStorage.getItem('brainbites_notifications_enabled');
+      if (notifications !== null) {
+        setNotificationsEnabled(notifications !== 'false');
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  };
+
+  const loadStats = () => {
+    const stats = ScoreService.getScoreInfo();
+    setScoreInfo({
+      totalScore: stats.totalScore,
+      highestStreak: stats.highestStreak,
+      questionsAnswered: stats.questionsAnswered,
+    });
+  };
+
+  const handleToggleMascot = async (value: boolean) => {
+    setShowMascot(value);
+    await AsyncStorage.setItem('brainbites_show_mascot', value.toString());
+    SoundService.playButtonPress();
+  };
+
+  const handleToggleSounds = async (value: boolean) => {
+    setSoundsEnabled(value);
+    await SoundService.setSoundsEnabled(value);
+    if (value) {
+      SoundService.playButtonPress();
+    }
+  };
+
+  const handleToggleNotifications = async (value: boolean) => {
+    setNotificationsEnabled(value);
+    await AsyncStorage.setItem('brainbites_notifications_enabled', value.toString());
+    SoundService.playButtonPress();
+  };
+
+  const handleResetProgress = () => {
+    Alert.alert(
+      'Reset All Progress',
+      'This will reset all your progress, scores, streaks, and earned time. This cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Reset all services
+              await ScoreService.resetProgress();
+              await QuizService.resetUsedQuestions();
+              await EnhancedTimerService.resetProgress();
+              
+              // Clear all AsyncStorage data
+              const keys = [
+                'brainbites_score_data',
+                'brainbites_timer_data',
+                'brainbites_used_questions',
+              ];
+              await AsyncStorage.multiRemove(keys);
+              
+              SoundService.playButtonPress();
+              Alert.alert('Success', 'All progress has been reset.');
+              
+              // Reload stats
+              loadStats();
+            } catch (error) {
+              console.error('Error resetting progress:', error);
+              Alert.alert('Error', 'Failed to reset progress. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleBack = () => {
     SoundService.playButtonPress();
     navigation.goBack();
   };
 
-  const handleSoundToggle = () => {
-    SoundService.playButtonPress();
-    setSoundEnabled(!soundEnabled);
-  };
-
-  const handleMusicToggle = () => {
-    SoundService.playButtonPress();
-    setMusicEnabled(!musicEnabled);
-  };
-
-  const handleNotificationsToggle = () => {
-    SoundService.playButtonPress();
-    setNotificationsEnabled(!notificationsEnabled);
-  };
-
-  const handleResetProgress = () => {
-    SoundService.playButtonPress();
-    // Add confirmation dialog here in the future
-    resetStore();
-  };
-
   const renderSettingItem = (
     icon: string,
+    iconColor: string,
     title: string,
-    subtitle: string,
-    onPress: () => void,
-    showSwitch = false,
-    switchValue = false,
-    delay = 0
+    description: string,
+    value: boolean,
+    onValueChange: (value: boolean) => void
   ) => (
-    <Animated.View
-      entering={FadeInDown.duration(600).delay(delay)}
-      style={styles.settingItem}
-    >
-      <TouchableOpacity
-        style={styles.settingContent}
-        onPress={onPress}
-        activeOpacity={0.7}
-      >
-        <View style={styles.settingLeft}>
-          <View style={styles.iconContainer}>
-            <Icon name={icon} size={24} color={Colors.primary} />
-          </View>
-          <View style={styles.settingText}>
-            <Text style={styles.settingTitle}>{title}</Text>
-            <Text style={styles.settingSubtitle}>{subtitle}</Text>
-          </View>
+    <View style={styles.settingItem}>
+      <View style={styles.settingInfo}>
+        <Icon name={icon} size={24} color={iconColor} style={styles.settingIcon} />
+        <View style={styles.settingText}>
+          <Text style={styles.settingTitle}>{title}</Text>
+          <Text style={styles.settingDescription}>{description}</Text>
         </View>
-        {showSwitch ? (
-          <Switch
-            value={switchValue}
-            onValueChange={onPress}
-            trackColor={{ false: Colors.textLight, true: Colors.primary }}
-            thumbColor={Colors.surface}
-          />
-        ) : (
-          <Icon name="chevron-right" size={24} color={Colors.textLight} />
-        )}
-      </TouchableOpacity>
-    </Animated.View>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        trackColor={{ false: '#E0E0E0', true: Colors.primary }}
+        thumbColor="#FFFFFF"
+        ios_backgroundColor="#E0E0E0"
+      />
+    </View>
+  );
+
+  const renderStatItem = (icon: string, value: string | number, label: string) => (
+    <View style={styles.statItem}>
+      <Icon name={icon} size={24} color={Colors.primary} />
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <Animated.View entering={FadeIn.duration(600)} style={styles.header}>
-        <TouchableOpacity onPress={handleBackPress}>
-          <Icon name="arrow-left" size={28} color={Colors.textPrimary} />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <Icon name="arrow-left" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Settings</Text>
-        <View style={{ width: 28 }} />
-      </Animated.View>
+        <Text style={styles.headerTitle}>Settings</Text>
+        <View style={styles.headerSpacer} />
+      </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.content}>
-        {/* Sound Settings */}
-        <Animated.View
-          entering={FadeInDown.duration(600).delay(200)}
-          style={styles.section}
-        >
-          <Text style={styles.sectionTitle}>Audio</Text>
-          {renderSettingItem(
-            'volume-high',
-            'Sound Effects',
-            'Play sound effects during gameplay',
-            handleSoundToggle,
-            true,
-            soundEnabled,
-            300
-          )}
-          {renderSettingItem(
-            'music',
-            'Background Music',
-            'Play music in menus and during gameplay',
-            handleMusicToggle,
-            true,
-            musicEnabled,
-            400
-          )}
-        </Animated.View>
-
-        {/* Notification Settings */}
-        <Animated.View
-          entering={FadeInDown.duration(600).delay(500)}
-          style={styles.section}
-        >
-          <Text style={styles.sectionTitle}>Notifications</Text>
-          {renderSettingItem(
-            'bell',
-            'Push Notifications',
-            'Receive reminders and achievements',
-            handleNotificationsToggle,
-            true,
-            notificationsEnabled,
-            600
-          )}
-        </Animated.View>
-
-        {/* Stats */}
-        <Animated.View
-          entering={FadeInDown.duration(600).delay(700)}
-          style={styles.section}
-        >
-          <Text style={styles.sectionTitle}>Statistics</Text>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Stats Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Your Stats</Text>
           <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <Icon name="fire" size={24} color={Colors.error} />
-              <Text style={styles.statValue}>{dailyLoginStreak}</Text>
-              <Text style={styles.statLabel}>Day Streak</Text>
+            {renderStatItem('star', scoreInfo.totalScore.toLocaleString(), 'Total Score')}
+            {renderStatItem('fire', scoreInfo.highestStreak, 'Best Streak')}
+            {renderStatItem('help-circle', scoreInfo.questionsAnswered, 'Questions')}
+          </View>
+        </View>
+
+        {/* Preferences Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Preferences</Text>
+          <View style={styles.settingsContainer}>
+            {renderSettingItem(
+              'account-cowboy-hat',
+              Colors.primary,
+              'Show Mascot',
+              'Display the helpful mascot character',
+              showMascot,
+              handleToggleMascot
+            )}
+            {renderSettingItem(
+              'volume-high',
+              Colors.info,
+              'Sound Effects',
+              'Play sounds for actions and events',
+              soundsEnabled,
+              handleToggleSounds
+            )}
+            {renderSettingItem(
+              'bell',
+              Colors.warning,
+              'Notifications',
+              'Receive reminders to play and learn',
+              notificationsEnabled,
+              handleToggleNotifications
+            )}
+          </View>
+        </View>
+
+        {/* About Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>About</Text>
+          <View style={styles.aboutContainer}>
+            <View style={styles.aboutItem}>
+              <Text style={styles.aboutLabel}>Version</Text>
+              <Text style={styles.aboutValue}>1.0.0</Text>
+            </View>
+            <View style={styles.aboutItem}>
+              <Text style={styles.aboutLabel}>Questions Available</Text>
+              <Text style={styles.aboutValue}>{QuizService.getQuestionCount()}</Text>
             </View>
           </View>
-        </Animated.View>
+        </View>
 
-        {/* Data Management */}
-        <Animated.View
-          entering={FadeInDown.duration(600).delay(800)}
-          style={styles.section}
-        >
-          <Text style={styles.sectionTitle}>Data</Text>
-          {renderSettingItem(
-            'refresh',
-            'Reset Progress',
-            'Clear all progress and start fresh',
-            handleResetProgress,
-            false,
-            false,
-            900
-          )}
-        </Animated.View>
+        {/* Actions Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Actions</Text>
+          <TouchableOpacity
+            style={styles.dangerButton}
+            onPress={handleResetProgress}
+            activeOpacity={0.7}
+          >
+            <Icon name="alert-circle" size={20} color={Colors.error} />
+            <Text style={styles.dangerButtonText}>Reset All Progress</Text>
+          </TouchableOpacity>
+        </View>
 
-        {/* About */}
-        <Animated.View
-          entering={FadeInDown.duration(600).delay(1000)}
-          style={styles.section}
-        >
-          <Text style={styles.sectionTitle}>About</Text>
-          {renderSettingItem(
-            'information',
-            'Version',
-            'BrainBites v1.0.0',
-            () => {},
-            false,
-            false,
-            1100
-          )}
-          {renderSettingItem(
-            'heart',
-            'Made with ❤️',
-            'For learning and fun',
-            () => {},
-            false,
-            false,
-            1200
-          )}
-        </Animated.View>
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Made with ❤️ by BrainBites Team</Text>
+          <Text style={styles.footerSubtext}>Keep learning, keep growing!</Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -225,90 +274,168 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: Colors.surface,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 4,
   },
-  title: {
-    fontSize: Fonts.sizes.xl,
-    fontWeight: Fonts.weights.bold,
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
     color: Colors.textPrimary,
+    fontFamily: Platform.OS === 'ios' ? 'Avenir-Heavy' : 'sans-serif-black',
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: Spacing.lg,
+  headerSpacer: {
+    width: 40,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 40,
   },
   section: {
-    marginTop: Spacing.xl,
+    marginBottom: 32,
   },
   sectionTitle: {
-    fontSize: Fonts.sizes.lg,
-    fontWeight: Fonts.weights.semibold,
+    fontSize: 18,
+    fontWeight: 'bold',
     color: Colors.textPrimary,
-    marginBottom: Spacing.md,
+    marginBottom: 16,
+    fontFamily: Platform.OS === 'ios' ? 'Avenir-Heavy' : 'sans-serif-black',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: Colors.textPrimary,
+    marginTop: 8,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 4,
+  },
+  settingsContainer: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   settingItem: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    marginBottom: Spacing.sm,
-    ...Layout.shadow.small,
-  },
-  settingContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: Spacing.md,
+    padding: 16,
+    borderRadius: 12,
   },
-  settingLeft: {
+  settingInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: Spacing.md,
+  settingIcon: {
+    marginRight: 16,
   },
   settingText: {
     flex: 1,
   },
   settingTitle: {
-    fontSize: Fonts.sizes.md,
-    fontWeight: Fonts.weights.medium,
+    fontSize: 16,
+    fontWeight: '600',
     color: Colors.textPrimary,
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  settingSubtitle: {
-    fontSize: Fonts.sizes.sm,
+  settingDescription: {
+    fontSize: 14,
     color: Colors.textSecondary,
   },
-  statsContainer: {
+  aboutContainer: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  aboutItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  aboutLabel: {
+    fontSize: 16,
+    color: Colors.textSecondary,
+  },
+  aboutValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  dangerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: Colors.surface,
     borderRadius: 12,
-    padding: Spacing.md,
-    ...Layout.shadow.small,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: Colors.error,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  statItem: {
+  dangerButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.error,
+    marginLeft: 8,
+  },
+  footer: {
     alignItems: 'center',
+    paddingTop: 40,
   },
-  statValue: {
-    fontSize: Fonts.sizes.xxl,
-    fontWeight: Fonts.weights.bold,
-    color: Colors.textPrimary,
-    marginTop: Spacing.sm,
-  },
-  statLabel: {
-    fontSize: Fonts.sizes.sm,
+  footerText: {
+    fontSize: 14,
     color: Colors.textSecondary,
-    marginTop: Spacing.xs,
+    marginBottom: 4,
+  },
+  footerSubtext: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontStyle: 'italic',
   },
 });
 
-export default SettingsScreen; 
+export default SettingsScreen;

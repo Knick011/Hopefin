@@ -1,222 +1,287 @@
-// src/services/QuizService.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Question } from '@/utils/constants';
 
-// Default questions for initial release
-const DEFAULT_QUESTIONS: Question[] = [
-  {
-    id: 1,
-    category: 'Science',
-    question: 'What is the chemical symbol for water?',
-    options: { A: 'H2O', B: 'CO2', C: 'O2', D: 'NaCl' },
-    correctAnswer: 'A',
-    explanation: 'Water is composed of two hydrogen atoms and one oxygen atom - H2O',
-    level: 'Easy'
-  },
-  {
-    id: 2,
-    category: 'Science',
-    question: 'Which planet is known as the Red Planet?',
-    options: { A: 'Venus', B: 'Mars', C: 'Jupiter', D: 'Saturn' },
-    correctAnswer: 'B',
-    explanation: 'Mars appears red due to iron oxide on its surface',
-    level: 'Easy'
-  },
-  {
-    id: 3,
-    category: 'Math',
-    question: 'What is 15% of 200?',
-    options: { A: '20', B: '25', C: '30', D: '35' },
-    correctAnswer: 'C',
-    explanation: '15% of 200 = 0.15 × 200 = 30',
-    level: 'Medium'
-  },
-  {
-    id: 4,
-    category: 'Math',
-    question: 'What is the square root of 144?',
-    options: { A: '10', B: '11', C: '12', D: '13' },
-    correctAnswer: 'C',
-    explanation: '√144 = 12 because 12 × 12 = 144',
-    level: 'Medium'
-  },
-  {
-    id: 5,
-    category: 'History',
-    question: 'In which year did World War II end?',
-    options: { A: '1943', B: '1944', C: '1945', D: '1946' },
-    correctAnswer: 'C',
-    explanation: 'World War II ended in 1945 with the surrender of Japan',
-    level: 'Easy'
-  },
-  {
-    id: 6,
-    category: 'Geography',
-    question: 'What is the capital of France?',
-    options: { A: 'London', B: 'Berlin', C: 'Madrid', D: 'Paris' },
-    correctAnswer: 'D',
-    explanation: 'Paris has been the capital of France since 987 AD',
-    level: 'Easy'
-  },
-  {
-    id: 7,
-    category: 'Literature',
-    question: 'Who wrote Romeo and Juliet?',
-    options: { A: 'Charles Dickens', B: 'William Shakespeare', C: 'Mark Twain', D: 'Jane Austen' },
-    correctAnswer: 'B',
-    explanation: 'William Shakespeare wrote Romeo and Juliet around 1595',
-    level: 'Easy'
-  },
-  {
-    id: 8,
-    category: 'Technology',
-    question: 'What does CPU stand for?',
-    options: { A: 'Computer Processing Unit', B: 'Central Processing Unit', C: 'Core Processing Unit', D: 'Computer Power Unit' },
-    correctAnswer: 'B',
-    explanation: 'CPU stands for Central Processing Unit - the brain of a computer',
-    level: 'Easy'
-  },
-  {
-    id: 9,
-    category: 'Sports',
-    question: 'How many players are on a basketball team?',
-    options: { A: '4', B: '5', C: '6', D: '7' },
-    correctAnswer: 'B',
-    explanation: 'A basketball team has 5 players on the court at one time',
-    level: 'Easy'
-  },
-  {
-    id: 10,
-    category: 'Music',
-    question: 'How many strings does a standard guitar have?',
-    options: { A: '4', B: '5', C: '6', D: '7' },
-    correctAnswer: 'C',
-    explanation: 'A standard guitar has 6 strings: E A D G B E',
-    level: 'Easy'
-  },
-];
+interface Question {
+  id: number;
+  category: string;
+  question: string;
+  options: {
+    A: string;
+    B: string;
+    C: string;
+    D: string;
+  };
+  correctAnswer: string;
+  explanation: string;
+  level?: 'easy' | 'medium' | 'hard';
+}
 
 class QuizService {
   private questions: Question[] = [];
   private categories: string[] = [];
   private usedQuestionIds: Set<number> = new Set();
   private STORAGE_KEY = 'brainbites_used_questions';
+  private initialized = false;
 
-  constructor() {
-    this.questions = DEFAULT_QUESTIONS;
-    this.extractCategories();
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+    
+    try {
+      // Load used questions from storage
+      await this.loadUsedQuestions();
+      
+      // Load questions from your assets
+      // For now, using hardcoded questions
+      this.loadDefaultQuestions();
+      
+      // Extract categories
+      this.extractCategories();
+      
+      this.initialized = true;
+    } catch (error) {
+      console.error('Error initializing QuizService:', error);
+      throw error;
+    }
   }
 
-  async initialize() {
-    await this.loadUsedQuestions();
-    // In a future update, load questions from a server or local CSV
+  private loadDefaultQuestions(): void {
+    // Default questions - replace with actual loading from assets
+    this.questions = [
+      // Fun Facts Category
+      {
+        id: 1,
+        category: 'funfacts',
+        question: 'What is the only mammal that can fly?',
+        options: {
+          A: 'Flying squirrel',
+          B: 'Bat',
+          C: 'Sugar glider',
+          D: 'Flying lemur',
+        },
+        correctAnswer: 'B',
+        explanation: 'Bats are the only mammals capable of true flight. Flying squirrels and sugar gliders can only glide.',
+        level: 'easy',
+      },
+      {
+        id: 2,
+        category: 'funfacts',
+        question: 'How many hearts does an octopus have?',
+        options: {
+          A: 'One',
+          B: 'Two',
+          C: 'Three',
+          D: 'Four',
+        },
+        correctAnswer: 'C',
+        explanation: 'An octopus has three hearts! Two pump blood to the gills, and one pumps blood to the rest of the body.',
+        level: 'medium',
+      },
+      {
+        id: 3,
+        category: 'funfacts',
+        question: 'What is the strongest muscle in the human body?',
+        options: {
+          A: 'Bicep',
+          B: 'Heart',
+          C: 'Tongue',
+          D: 'Jaw muscle',
+        },
+        correctAnswer: 'D',
+        explanation: 'The masseter (jaw muscle) is the strongest muscle based on its weight. It can close teeth with a force of 200 pounds!',
+        level: 'medium',
+      },
+      
+      // Psychology Category
+      {
+        id: 4,
+        category: 'psychology',
+        question: 'What percentage of communication is non-verbal?',
+        options: {
+          A: '55%',
+          B: '65%',
+          C: '75%',
+          D: '93%',
+        },
+        correctAnswer: 'D',
+        explanation: 'Studies suggest that 93% of communication is non-verbal - 55% body language and 38% tone of voice.',
+        level: 'medium',
+      },
+      {
+        id: 5,
+        category: 'psychology',
+        question: 'How long does it take to form a habit on average?',
+        options: {
+          A: '21 days',
+          B: '30 days',
+          C: '66 days',
+          D: '90 days',
+        },
+        correctAnswer: 'C',
+        explanation: 'Research shows it takes an average of 66 days to form a habit, though it can range from 18 to 254 days.',
+        level: 'easy',
+      },
+      {
+        id: 6,
+        category: 'psychology',
+        question: 'What is the "Dunning-Kruger Effect"?',
+        options: {
+          A: 'Fear of public speaking',
+          B: 'Overestimating one\'s abilities',
+          C: 'Memory loss with age',
+          D: 'Social anxiety disorder',
+        },
+        correctAnswer: 'B',
+        explanation: 'The Dunning-Kruger Effect is when people with limited knowledge overestimate their competence.',
+        level: 'hard',
+      },
+      
+      // Science Category
+      {
+        id: 7,
+        category: 'science',
+        question: 'What is the speed of light in a vacuum?',
+        options: {
+          A: '186,282 miles per second',
+          B: '299,792 kilometers per second',
+          C: 'Both A and B',
+          D: 'Neither A nor B',
+        },
+        correctAnswer: 'C',
+        explanation: 'Light travels at approximately 186,282 miles per second or 299,792 kilometers per second in a vacuum.',
+        level: 'medium',
+      },
+      {
+        id: 8,
+        category: 'science',
+        question: 'What is the most abundant gas in Earth\'s atmosphere?',
+        options: {
+          A: 'Oxygen',
+          B: 'Carbon dioxide',
+          C: 'Nitrogen',
+          D: 'Hydrogen',
+        },
+        correctAnswer: 'C',
+        explanation: 'Nitrogen makes up about 78% of Earth\'s atmosphere, while oxygen comprises about 21%.',
+        level: 'easy',
+      },
+      
+      // History Category
+      {
+        id: 9,
+        category: 'history',
+        question: 'In which year did World War II end?',
+        options: {
+          A: '1943',
+          B: '1944',
+          C: '1945',
+          D: '1946',
+        },
+        correctAnswer: 'C',
+        explanation: 'World War II ended in 1945 with the surrender of Germany in May and Japan in August.',
+        level: 'easy',
+      },
+      {
+        id: 10,
+        category: 'history',
+        question: 'Who was the first person to walk on the moon?',
+        options: {
+          A: 'Buzz Aldrin',
+          B: 'Neil Armstrong',
+          C: 'Yuri Gagarin',
+          D: 'John Glenn',
+        },
+        correctAnswer: 'B',
+        explanation: 'Neil Armstrong was the first person to walk on the moon on July 20, 1969, during the Apollo 11 mission.',
+        level: 'easy',
+      },
+    ];
   }
 
-  private extractCategories() {
+  private extractCategories(): void {
     const categorySet = new Set(this.questions.map(q => q.category));
     this.categories = Array.from(categorySet);
   }
 
-  private async loadUsedQuestions() {
+  private async loadUsedQuestions(): Promise<void> {
     try {
       const stored = await AsyncStorage.getItem(this.STORAGE_KEY);
       if (stored) {
-        const parsed = JSON.parse(stored);
-        this.usedQuestionIds = new Set(parsed.usedIds || []);
+        const ids = JSON.parse(stored);
+        this.usedQuestionIds = new Set(ids);
       }
     } catch (error) {
       console.error('Error loading used questions:', error);
     }
   }
 
-  private async saveUsedQuestions() {
+  private async saveUsedQuestions(): Promise<void> {
     try {
-      const data = {
-        usedIds: Array.from(this.usedQuestionIds),
-        lastUpdated: Date.now(),
-      };
-      await AsyncStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
+      const ids = Array.from(this.usedQuestionIds);
+      await AsyncStorage.setItem(this.STORAGE_KEY, JSON.stringify(ids));
     } catch (error) {
       console.error('Error saving used questions:', error);
     }
   }
 
-  async resetUsedQuestions() {
+  async getRandomQuestion(category?: string, difficulty?: string): Promise<Question | null> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+
+    // Filter questions
+    let availableQuestions = this.questions.filter(q => !this.usedQuestionIds.has(q.id));
+    
+    if (category && category !== 'all') {
+      availableQuestions = availableQuestions.filter(q => q.category === category);
+    }
+    
+    if (difficulty && difficulty !== 'mixed') {
+      availableQuestions = availableQuestions.filter(q => q.level === difficulty);
+    }
+
+    // If no questions available, reset used questions
+    if (availableQuestions.length === 0) {
+      await this.resetUsedQuestions();
+      availableQuestions = this.questions.filter(q => {
+        if (category && category !== 'all') {
+          return q.category === category;
+        }
+        return true;
+      });
+    }
+
+    if (availableQuestions.length === 0) {
+      return null;
+    }
+
+    // Select random question
+    const randomIndex = Math.floor(Math.random() * availableQuestions.length);
+    const question = availableQuestions[randomIndex];
+
+    // Mark as used
+    this.usedQuestionIds.add(question.id);
+    await this.saveUsedQuestions();
+
+    return question;
+  }
+
+  async resetUsedQuestions(): Promise<void> {
     this.usedQuestionIds.clear();
     await AsyncStorage.removeItem(this.STORAGE_KEY);
   }
 
   getCategories(): string[] {
-    return this.categories;
+    return [...this.categories];
   }
 
-  getRandomQuestion(category = 'All', difficulty: 'Easy' | 'Medium' | 'Hard' | 'Mixed' = 'Mixed'): Question | null {
-    // Filter questions based on criteria
-    let availableQuestions = this.questions.filter(q => !this.usedQuestionIds.has(q.id));
-    
-    // Apply category filter
-    if (category && category !== 'All') {
-      availableQuestions = availableQuestions.filter(q => q.category === category);
+  getQuestionCount(category?: string): number {
+    if (!category || category === 'all') {
+      return this.questions.length;
     }
-    
-    // Apply difficulty filter
-    if (difficulty && difficulty !== 'Mixed') {
-      availableQuestions = availableQuestions.filter(q => q.level === difficulty);
-    }
-    
-    // If no questions available, reset used questions
-    if (availableQuestions.length === 0) {
-      this.usedQuestionIds.clear();
-      availableQuestions = this.questions.filter(q => {
-        if (category && category !== 'All' && q.category !== category) return false;
-        if (difficulty && difficulty !== 'Mixed' && q.level !== difficulty) return false;
-        return true;
-      });
-    }
-    
-    if (availableQuestions.length === 0) {
-      return null;
-    }
-    
-    // Select random question
-    const randomIndex = Math.floor(Math.random() * availableQuestions.length);
-    const question = availableQuestions[randomIndex];
-    
-    // Mark as used
-    this.usedQuestionIds.add(question.id);
-    this.saveUsedQuestions();
-    
-    return question;
+    return this.questions.filter(q => q.category === category).length;
   }
 
-  getQuestionStats() {
-    return {
-      total: this.questions.length,
-      used: this.usedQuestionIds.size,
-      remaining: this.questions.length - this.usedQuestionIds.size,
-      byCategory: this.getCategoryStats(),
-      byDifficulty: this.getDifficultyStats(),
-    };
-  }
-
-  private getCategoryStats(): Record<string, number> {
-    const stats: Record<string, number> = {};
-    this.questions.forEach(q => {
-      stats[q.category] = (stats[q.category] || 0) + 1;
-    });
-    return stats;
-  }
-
-  private getDifficultyStats(): Record<string, number> {
-    const stats: Record<string, number> = {
-      Easy: 0,
-      Medium: 0,
-      Hard: 0,
-    };
-    this.questions.forEach(q => {
-      stats[q.level]++;
-    });
-    return stats;
+  getUsedQuestionCount(): number {
+    return this.usedQuestionIds.size;
   }
 }
 

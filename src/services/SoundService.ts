@@ -1,160 +1,261 @@
-// src/services/SoundService.ts
-import Sound from 'react-native-sound';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Enable playback in silence mode
-Sound.setCategory('Playback');
-
-interface SoundConfig {
-  [key: string]: Sound | null;
+interface ScoreData {
+  totalScore: number;
+  currentStreak: number;
+  highestStreak: number;
+  questionsAnswered: number;
+  correctAnswers: number;
+  achievements: string[];
+  lastPlayDate: string;
+  dailyStreak: number;
 }
 
-class SoundService {
-  private sounds: SoundConfig = {};
-  private musicVolume = 0.3;
-  private effectsVolume = 0.6;
-  private soundEnabled = true;
-  private currentMusic: string | null = null;
-  private isInitialized = false;
+interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  condition: (data: ScoreData) => boolean;
+}
 
-  async initialize() {
+class ScoreService {
+  private scoreData: ScoreData = {
+    totalScore: 0,
+    currentStreak: 0,
+    highestStreak: 0,
+    questionsAnswered: 0,
+    correctAnswers: 0,
+    achievements: [],
+    lastPlayDate: '',
+    dailyStreak: 0,
+  };
+
+  private STORAGE_KEY = 'brainbites_score_data';
+
+  private achievements: Achievement[] = [
+    {
+      id: 'first_correct',
+      name: 'First Steps',
+      description: 'Answer your first question correctly',
+      icon: 'star',
+      condition: (data) => data.correctAnswers >= 1,
+    },
+    {
+      id: 'streak_5',
+      name: 'On Fire!',
+      description: 'Get 5 correct answers in a row',
+      icon: 'fire',
+      condition: (data) => data.highestStreak >= 5,
+    },
+    {
+      id: 'streak_10',
+      name: 'Unstoppable!',
+      description: 'Get 10 correct answers in a row',
+      icon: 'rocket',
+      condition: (data) => data.highestStreak >= 10,
+    },
+    {
+      id: 'streak_20',
+      name: 'Genius Mode',
+      description: 'Get 20 correct answers in a row',
+      icon: 'brain',
+      condition: (data) => data.highestStreak >= 20,
+    },
+    {
+      id: 'score_100',
+      name: 'Century',
+      description: 'Reach 100 total points',
+      icon: 'trophy',
+      condition: (data) => data.totalScore >= 100,
+    },
+    {
+      id: 'score_1000',
+      name: 'High Scorer',
+      description: 'Reach 1,000 total points',
+      icon: 'medal',
+      condition: (data) => data.totalScore >= 1000,
+    },
+    {
+      id: 'daily_streak_7',
+      name: 'Week Warrior',
+      description: 'Play for 7 days in a row',
+      icon: 'calendar-check',
+      condition: (data) => data.dailyStreak >= 7,
+    },
+    {
+      id: 'daily_streak_30',
+      name: 'Dedicated Learner',
+      description: 'Play for 30 days in a row',
+      icon: 'school',
+      condition: (data) => data.dailyStreak >= 30,
+    },
+    {
+      id: 'questions_100',
+      name: 'Curious Mind',
+      description: 'Answer 100 questions',
+      icon: 'help-circle',
+      condition: (data) => data.questionsAnswered >= 100,
+    },
+    {
+      id: 'accuracy_80',
+      name: 'Sharp Shooter',
+      description: 'Maintain 80% accuracy (min 50 questions)',
+      icon: 'target',
+      condition: (data) => 
+        data.questionsAnswered >= 50 && 
+        (data.correctAnswers / data.questionsAnswered) >= 0.8,
+    },
+  ];
+
+  async loadSavedData(): Promise<void> {
     try {
-      // Load sound settings
-      const soundSetting = await AsyncStorage.getItem('brainbites_sounds_enabled');
-      if (soundSetting !== null) {
-        this.soundEnabled = soundSetting === 'true';
+      const savedData = await AsyncStorage.getItem(this.STORAGE_KEY);
+      if (savedData) {
+        this.scoreData = JSON.parse(savedData);
+        await this.checkDailyStreak();
       }
-
-      // We'll preload sounds when we have the audio files
-      this.isInitialized = true;
-      console.log('SoundService initialized successfully');
     } catch (error) {
-      console.error('Error initializing SoundService:', error);
+      console.error('Error loading score data:', error);
     }
   }
 
-  async setSoundEnabled(enabled: boolean) {
-    this.soundEnabled = enabled;
-    await AsyncStorage.setItem('brainbites_sounds_enabled', enabled.toString());
-    
-    if (!enabled && this.currentMusic) {
-      this.stopMusic();
+  private async saveData(): Promise<void> {
+    try {
+      await AsyncStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.scoreData));
+    } catch (error) {
+      console.error('Error saving score data:', error);
     }
   }
 
-  getSoundEnabled(): boolean {
-    return this.soundEnabled;
-  }
+  private async checkDailyStreak(): Promise<void> {
+    const today = new Date().toDateString();
+    const lastPlay = this.scoreData.lastPlayDate;
 
-  setMusicVolume(volume: number) {
-    this.musicVolume = Math.max(0, Math.min(1, volume));
-    
-    // Update volume for current music if playing
-    if (this.currentMusic && this.sounds[this.currentMusic]) {
-      this.sounds[this.currentMusic]?.setVolume(this.musicVolume);
-    }
-  }
+    if (!lastPlay) {
+      this.scoreData.dailyStreak = 1;
+    } else {
+      const lastPlayDate = new Date(lastPlay);
+      const todayDate = new Date(today);
+      const dayDiff = Math.floor((todayDate.getTime() - lastPlayDate.getTime()) / (1000 * 60 * 60 * 24));
 
-  setEffectsVolume(volume: number) {
-    this.effectsVolume = Math.max(0, Math.min(1, volume));
-  }
-
-  // Sound effect methods (will implement when we have audio files)
-  playButtonPress() {
-    if (!this.soundEnabled) return;
-    // Play button press sound
-    console.log('Button press sound');
-  }
-
-  playSuccess() {
-    if (!this.soundEnabled) return;
-    // Play success sound
-    console.log('Success sound');
-  }
-
-  playError() {
-    if (!this.soundEnabled) return;
-    // Play error sound
-    console.log('Error sound');
-  }
-
-  playCorrect() {
-    if (!this.soundEnabled) return;
-    // Play correct answer sound
-    console.log('Correct answer sound');
-  }
-
-  playWrong() {
-    if (!this.soundEnabled) return;
-    // Play wrong answer sound
-    console.log('Wrong answer sound');
-  }
-
-  playStreak() {
-    if (!this.soundEnabled) return;
-    // Play streak milestone sound
-    console.log('Streak milestone sound');
-  }
-
-  playAchievement() {
-    if (!this.soundEnabled) return;
-    // Play achievement sound
-    console.log('Achievement sound');
-  }
-
-  playTimeWarning() {
-    if (!this.soundEnabled) return;
-    // Play time warning sound
-    console.log('Time warning sound');
-  }
-
-  // Music management
-  playMenuMusic() {
-    if (!this.soundEnabled) return;
-    // Play menu music
-    console.log('Playing menu music');
-    this.currentMusic = 'menuMusic';
-  }
-
-  playQuizMusic() {
-    if (!this.soundEnabled) return;
-    // Play quiz music
-    console.log('Playing quiz music');
-    this.currentMusic = 'quizMusic';
-  }
-
-  stopMusic() {
-    if (this.currentMusic && this.sounds[this.currentMusic]) {
-      this.sounds[this.currentMusic]?.stop();
-      this.currentMusic = null;
-    }
-  }
-
-  pauseMusic() {
-    if (this.currentMusic && this.sounds[this.currentMusic]) {
-      this.sounds[this.currentMusic]?.pause();
-    }
-  }
-
-  resumeMusic() {
-    if (this.currentMusic && this.sounds[this.currentMusic] && this.soundEnabled) {
-      this.sounds[this.currentMusic]?.play();
-    }
-  }
-
-  // Clean up resources
-  release() {
-    this.stopMusic();
-    
-    Object.values(this.sounds).forEach(sound => {
-      if (sound) {
-        sound.release();
+      if (dayDiff === 0) {
+        // Already played today
+        return;
+      } else if (dayDiff === 1) {
+        // Consecutive day
+        this.scoreData.dailyStreak++;
+      } else {
+        // Streak broken
+        this.scoreData.dailyStreak = 1;
       }
-    });
+    }
+
+    this.scoreData.lastPlayDate = today;
+    await this.saveData();
+  }
+
+  async addPoints(points: number, currentStreak: number): Promise<string[]> {
+    this.scoreData.totalScore += points;
+    this.scoreData.currentStreak = currentStreak;
     
-    this.sounds = {};
-    this.isInitialized = false;
+    if (currentStreak > this.scoreData.highestStreak) {
+      this.scoreData.highestStreak = currentStreak;
+    }
+
+    // Check for new achievements
+    const newAchievements = await this.checkAchievements();
+    
+    await this.saveData();
+    return newAchievements;
+  }
+
+  async recordAnswer(isCorrect: boolean): Promise<void> {
+    this.scoreData.questionsAnswered++;
+    if (isCorrect) {
+      this.scoreData.correctAnswers++;
+    }
+    await this.saveData();
+  }
+
+  resetStreak(): void {
+    this.scoreData.currentStreak = 0;
+  }
+
+  private async checkAchievements(): Promise<string[]> {
+    const newAchievements: string[] = [];
+
+    for (const achievement of this.achievements) {
+      if (!this.scoreData.achievements.includes(achievement.id)) {
+        if (achievement.condition(this.scoreData)) {
+          this.scoreData.achievements.push(achievement.id);
+          newAchievements.push(achievement.id);
+        }
+      }
+    }
+
+    return newAchievements;
+  }
+
+  getScoreInfo(): ScoreData {
+    return { ...this.scoreData };
+  }
+
+  getAchievements(): Achievement[] {
+    return this.achievements.filter(a => 
+      this.scoreData.achievements.includes(a.id)
+    );
+  }
+
+  getAllAchievements(): Achievement[] {
+    return [...this.achievements];
+  }
+
+  getAchievementProgress(achievementId: string): number {
+    const achievement = this.achievements.find(a => a.id === achievementId);
+    if (!achievement) return 0;
+
+    switch (achievementId) {
+      case 'streak_5':
+        return Math.min(this.scoreData.highestStreak / 5, 1);
+      case 'streak_10':
+        return Math.min(this.scoreData.highestStreak / 10, 1);
+      case 'streak_20':
+        return Math.min(this.scoreData.highestStreak / 20, 1);
+      case 'score_100':
+        return Math.min(this.scoreData.totalScore / 100, 1);
+      case 'score_1000':
+        return Math.min(this.scoreData.totalScore / 1000, 1);
+      case 'daily_streak_7':
+        return Math.min(this.scoreData.dailyStreak / 7, 1);
+      case 'daily_streak_30':
+        return Math.min(this.scoreData.dailyStreak / 30, 1);
+      case 'questions_100':
+        return Math.min(this.scoreData.questionsAnswered / 100, 1);
+      case 'accuracy_80':
+        if (this.scoreData.questionsAnswered < 50) {
+          return this.scoreData.questionsAnswered / 50;
+        }
+        const accuracy = this.scoreData.correctAnswers / this.scoreData.questionsAnswered;
+        return Math.min(accuracy / 0.8, 1);
+      default:
+        return 0;
+    }
+  }
+
+  async resetProgress(): Promise<void> {
+    this.scoreData = {
+      totalScore: 0,
+      currentStreak: 0,
+      highestStreak: 0,
+      questionsAnswered: 0,
+      correctAnswers: 0,
+      achievements: [],
+      lastPlayDate: '',
+      dailyStreak: 0,
+    };
+    await this.saveData();
   }
 }
 
-export default new SoundService();
+export default new ScoreService();
