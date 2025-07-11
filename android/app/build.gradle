@@ -117,4 +117,10 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+    
+    // Exclude conflicting Android Support library classes
+    implementation('com.facebook.react:react-android') {
+        exclude group: 'com.android.support'
+        exclude group: 'androidx.core'
+    }
 }

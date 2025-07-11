@@ -1,0 +1,28 @@
+{
+  "questions": [
+    {
+      "id": 1,
+      "category": "funfacts",
+      "question": "What is the only mammal that can fly?",
+      "optionA": "Flying squirrel",
+      "optionB": "Bat",
+      "optionC": "Sugar glider",
+      "optionD": "Flying lemur",
+      "correctAnswer": "B",
+      "explanation": "Bats are the only mammals capable of true flight.",
+      "level": "easy"
+    },
+    {
+      "id": 2,
+      "category": "science",
+      "question": "What is the chemical symbol for water?",
+      "optionA": "H2O",
+      "optionB": "CO2",
+      "optionC": "O2",
+      "optionD": "NaCl",
+      "correctAnswer": "A",
+      "explanation": "Water is composed of two hydrogen atoms and one oxygen atom.",
+      "level": "easy"
+    }
+  ]
+}

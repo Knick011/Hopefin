@@ -1,8 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Sound from 'react-native-sound';
-
-// Enable playback in silence mode (iOS, safe for Android)
-Sound.setCategory('Playback');
+import SoundPlayer from 'react-native-sound-player';
+import { Platform } from 'react-native';
 
 const SOUNDS_ENABLED_KEY = 'brainbites_sounds_enabled';
 
@@ -17,8 +15,10 @@ const soundFiles = {
   timeBonus: 'time_bonus',
 };
 
-let menuMusicInstance: Sound | null = null;
-let quizMusicInstance: Sound | null = null;
+let menuMusicLooping = false;
+let quizMusicLooping = false;
+
+const getFileType = () => 'mp3'; // All your files are mp3
 
 const SoundService = {
   async isSoundsEnabled() {
@@ -31,83 +31,85 @@ const SoundService = {
   },
 
   async initialize() {
-    // Preload menu and quiz music for Android (from res/raw)
-    menuMusicInstance = new Sound(soundFiles.menuMusic, Sound.MAIN_BUNDLE, (error) => {
-      if (error) {
-        console.log('Failed to load menu music', error);
-      }
-    });
-    quizMusicInstance = new Sound(soundFiles.quizMusic, Sound.MAIN_BUNDLE, (error) => {
-      if (error) {
-        console.log('Failed to load quiz music', error);
-      }
-    });
+    // No preloading needed for react-native-sound-player
+    menuMusicLooping = false;
+    quizMusicLooping = false;
   },
 
   async playMenuMusic() {
     if (!(await this.isSoundsEnabled())) return;
-    if (menuMusicInstance) {
-      menuMusicInstance.setNumberOfLoops(-1);
-      menuMusicInstance.play((success) => {
-        if (!success) {
-          console.log('Failed to play menu music');
-        }
-      });
-    } else {
-      menuMusicInstance = new Sound(soundFiles.menuMusic, Sound.MAIN_BUNDLE, (error) => {
-        if (!error) {
-          menuMusicInstance?.setNumberOfLoops(-1);
-          menuMusicInstance?.play();
-        }
-      });
+    try {
+      SoundPlayer.stop();
+      SoundPlayer.playSoundFile(soundFiles.menuMusic, getFileType());
+      menuMusicLooping = true;
+      SoundPlayer.setNumberOfLoops(-1); // Loop indefinitely
+    } catch (e) {
+      console.log('Failed to play menu music', e);
     }
   },
 
   stopMusic() {
-    menuMusicInstance?.stop();
-    quizMusicInstance?.stop();
+    try {
+      SoundPlayer.stop();
+      menuMusicLooping = false;
+      quizMusicLooping = false;
+    } catch (e) {
+      console.log('Failed to stop music', e);
+    }
   },
 
   async playButtonPress() {
     if (!(await this.isSoundsEnabled())) return;
-    const sound = new Sound(soundFiles.buttonPress, Sound.MAIN_BUNDLE, (error) => {
-      if (!error) sound.play();
-    });
+    try {
+      SoundPlayer.playSoundFile(soundFiles.buttonPress, getFileType());
+    } catch (e) {
+      console.log('Failed to play button press sound', e);
+    }
   },
 
   async playCorrectAnswer() {
     if (!(await this.isSoundsEnabled())) return;
-    const sound = new Sound(soundFiles.correctAnswer, Sound.MAIN_BUNDLE, (error) => {
-      if (!error) sound.play();
-    });
+    try {
+      SoundPlayer.playSoundFile(soundFiles.correctAnswer, getFileType());
+    } catch (e) {
+      console.log('Failed to play correct answer sound', e);
+    }
   },
 
   async playWrongAnswer() {
     if (!(await this.isSoundsEnabled())) return;
-    const sound = new Sound(soundFiles.wrongAnswer, Sound.MAIN_BUNDLE, (error) => {
-      if (!error) sound.play();
-    });
+    try {
+      SoundPlayer.playSoundFile(soundFiles.wrongAnswer, getFileType());
+    } catch (e) {
+      console.log('Failed to play wrong answer sound', e);
+    }
   },
 
   async playAchievement() {
     if (!(await this.isSoundsEnabled())) return;
-    const sound = new Sound(soundFiles.achievement, Sound.MAIN_BUNDLE, (error) => {
-      if (!error) sound.play();
-    });
+    try {
+      SoundPlayer.playSoundFile(soundFiles.achievement, getFileType());
+    } catch (e) {
+      console.log('Failed to play achievement sound', e);
+    }
   },
 
   async playLevelUp() {
     if (!(await this.isSoundsEnabled())) return;
-    const sound = new Sound(soundFiles.levelUp, Sound.MAIN_BUNDLE, (error) => {
-      if (!error) sound.play();
-    });
+    try {
+      SoundPlayer.playSoundFile(soundFiles.levelUp, getFileType());
+    } catch (e) {
+      console.log('Failed to play level up sound', e);
+    }
   },
 
   async playTimeBonus() {
     if (!(await this.isSoundsEnabled())) return;
-    const sound = new Sound(soundFiles.timeBonus, Sound.MAIN_BUNDLE, (error) => {
-      if (!error) sound.play();
-    });
+    try {
+      SoundPlayer.playSoundFile(soundFiles.timeBonus, getFileType());
+    } catch (e) {
+      console.log('Failed to play time bonus sound', e);
+    }
   },
 };
 
