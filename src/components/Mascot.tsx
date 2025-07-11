@@ -143,17 +143,23 @@ const Mascot: React.FC<MascotProps> = ({
   
   // Get mascot image based on type
   const getMascotImage = () => {
-    const images = {
-      happy: require('../assets/images/mascot_happy.png'),
-      excited: require('../assets/images/mascot_excited.png'),
-      thoughtful: require('../assets/images/mascot_thoughtful.png'),
-      encouraging: require('../assets/images/mascot_encouraging.png'),
-      celebration: require('../assets/images/mascot_celebration.png'),
-      sad: require('../assets/images/mascot_sad.png'),
-      peeking: require('../assets/images/mascot_peeking.png'),
-    };
-    
-    return images[type] || images.happy;
+    try {
+      const images = {
+        happy: require('../assets/images/mascot_happy.png'),
+        excited: require('../assets/images/mascot_excited.png'),
+        thoughtful: require('../assets/images/mascot_thoughtful.png'),
+        encouraging: require('../assets/images/mascot_encouraging.png'),
+        celebration: require('../assets/images/mascot_celebration.png'),
+        sad: require('../assets/images/mascot_sad.png'),
+        peeking: require('../assets/images/mascot_peeking.png'),
+      };
+      
+      return images[type] || images.happy;
+    } catch (error) {
+      // Return null if images not found
+      console.log('Mascot images not found. Please add mascot images to assets/images/');
+      return null;
+    }
   };
   
   // Get position styles
@@ -233,14 +239,28 @@ const Mascot: React.FC<MascotProps> = ({
         onPress={handlePress}
         style={styles.mascotContainer}
       >
-        <Image
-          source={getMascotImage()}
-          style={[
-            styles.mascotImage,
-            dimensions,
-          ]}
-          resizeMode="contain"
-        />
+        {getMascotImage() ? (
+          <Image
+            source={getMascotImage()}
+            style={[
+              styles.mascotImage,
+              dimensions,
+            ]}
+            resizeMode="contain"
+          />
+        ) : (
+          <View style={[styles.mascotPlaceholder, dimensions]}>
+            <Icon 
+              name={type === 'celebration' ? 'party-popper' : 
+                    type === 'sad' ? 'emoticon-sad' : 
+                    type === 'thoughtful' ? 'head-question' :
+                    type === 'encouraging' ? 'hand-clap' :
+                    type === 'excited' ? 'emoticon-excited' : 'emoticon-happy'}
+              size={dimensions.width * 0.6}
+              color="#FF9F1C"
+            />
+          </View>
+        )}
         
         {/* Speech bubble */}
         {showBubble && message && (
@@ -289,6 +309,20 @@ const styles = StyleSheet.create({
   },
   mascotImage: {
     // Dimensions set dynamically
+  },
+  mascotPlaceholder: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   bubble: {
     position: 'absolute',

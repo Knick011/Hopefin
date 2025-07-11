@@ -7,6 +7,7 @@ import {
   Image,
   StyleSheet,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import SoundService from '../services/SoundService';
 
 const { width, height } = Dimensions.get('window');
@@ -104,6 +105,14 @@ const PeekingMascot: React.FC<PeekingMascotProps> = ({
     outputRange: side === 'left' ? [-100, 0] : [100, 0],
   });
   
+  const getMascotImage = () => {
+    try {
+      return require('../assets/images/mascot_peeking.png');
+    } catch (error) {
+      return null;
+    }
+  };
+
   return (
     <Animated.View
       style={[
@@ -120,11 +129,21 @@ const PeekingMascot: React.FC<PeekingMascotProps> = ({
         onPress={handlePress}
         style={styles.touchable}
       >
-        <Image
-          source={require('../assets/images/mascot_peeking.png')}
-          style={styles.mascot}
-          resizeMode="contain"
-        />
+        {getMascotImage() ? (
+          <Image
+            source={getMascotImage()}
+            style={styles.mascot}
+            resizeMode="contain"
+          />
+        ) : (
+          <View style={styles.mascotPlaceholder}>
+            <Icon 
+              name="eye"
+              size={40}
+              color="#FF9F1C"
+            />
+          </View>
+        )}
       </TouchableOpacity>
     </Animated.View>
   );
@@ -151,6 +170,22 @@ const styles = StyleSheet.create({
   mascot: {
     width: '100%',
     height: '100%',
+  },
+  mascotPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
 });
 
