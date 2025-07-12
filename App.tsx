@@ -71,7 +71,8 @@ const App: React.FC = () => {
       await ScoreService.loadSavedData();
       console.log('✓ Score service initialized');
 
-      await EnhancedTimerService.loadSavedTime();
+      // Initialize timer service with native timer
+      await EnhancedTimerService.initialize();
       console.log('✓ Timer service initialized');
 
       // Small delay for smooth transition
